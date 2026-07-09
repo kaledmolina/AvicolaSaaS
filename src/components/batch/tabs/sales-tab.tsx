@@ -5,9 +5,11 @@ import { Pencil, Plus, ShoppingBasket, Trash2 } from "lucide-react"
 
 import { ApiError } from "@/lib/api"
 import { formatDate, formatMoney, formatNumber } from "@/lib/format"
+import { saleIncome } from "@/lib/sale"
 import type { Sale } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 import { useDeleteSale } from "@/hooks/use-batches"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -114,51 +116,74 @@ export function SalesTab({ batchId, sales }: SalesTabProps) {
               <TableHeader className="sticky top-0 z-10 bg-card">
                 <TableRow>
                   <TableHead>Fecha</TableHead>
-                  <TableHead className="text-right">Cantidad</TableHead>
-                  <TableHead className="text-right">P. Unitario</TableHead>
+                  <TableHead className="text-right">Aves</TableHead>
+                  <TableHead className="text-center">Modo</TableHead>
+                  <TableHead className="text-right">Detalle</TableHead>
+                  <TableHead className="text-right">Precio</TableHead>
                   <TableHead className="text-right">Ingreso</TableHead>
                   <TableHead className="w-20 text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sales.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {formatDate(s.date)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatNumber(s.count)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatMoney(s.unitPrice)}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums">
-                      {formatMoney(s.count * s.unitPrice)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8"
-                          aria-label="Editar"
-                          onClick={() => setEditItem(s)}
+                {sales.map((s) => {
+                  const isKilo = s.unit === "kilo"
+                  return (
+                    <TableRow key={s.id}>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {formatDate(s.date)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatNumber(s.count)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge
+                          variant="secondary"
+                          className={
+                            isKilo
+                              ? "bg-primary/10 text-primary"
+                              : "bg-muted text-muted-foreground"
+                          }
                         >
-                          <Pencil className="size-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 text-destructive hover:text-destructive"
-                          aria-label="Eliminar"
-                          onClick={() => setDeleteItem(s)}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                          {isKilo ? "Kilo" : "Unidad"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right text-sm text-muted-foreground tabular-nums">
+                        {isKilo ? `${formatNumber(s.weight ?? 0)} kg` : "—"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatMoney(s.unitPrice)}
+                        <span className="block text-[10px] text-muted-foreground">
+                          {isKilo ? "por kg" : "por ave"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums">
+                        {formatMoney(saleIncome(s))}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8"
+                            aria-label="Editar"
+                            onClick={() => setEditItem(s)}
+                          >
+                            <Pencil className="size-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 text-destructive hover:text-destructive"
+                            aria-label="Eliminar"
+                            onClick={() => setDeleteItem(s)}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
           </div>

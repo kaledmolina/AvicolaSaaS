@@ -23,7 +23,7 @@ export async function GET() {
           initialCount: true,
           expenses: { select: { quantity: true, unitPrice: true } },
           mortality: { select: { count: true } },
-          sales: { select: { count: true, unitPrice: true } },
+          sales: { select: { count: true, unit: true, weight: true, unitPrice: true } },
         },
       },
     },
@@ -40,7 +40,14 @@ export async function GET() {
       totalMortality += b.mortality.reduce((s, m) => s + m.count, 0)
       totalSold += b.sales.reduce((s, s2) => s + s2.count, 0)
       totalExpenses += b.expenses.reduce((s, e) => s + e.quantity * e.unitPrice, 0)
-      totalIncome += b.sales.reduce((s, s2) => s + s2.count * s2.unitPrice, 0)
+      totalIncome += b.sales.reduce(
+        (s, s2) =>
+          s +
+          (s2.unit === "kilo"
+            ? (s2.weight ?? 0) * s2.unitPrice
+            : s2.count * s2.unitPrice),
+        0
+      )
     }
     return {
       id: u.id,

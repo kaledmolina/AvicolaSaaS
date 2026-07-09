@@ -3,18 +3,29 @@ import { z } from "zod"
 import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/session"
 
-const saleInputSchema = z.object({
-  date: z
-    .string()
-    .refine((s) => !Number.isNaN(Date.parse(s)), "Fecha inválida"),
-  count: z.coerce
-    .number()
-    .int("La cantidad debe ser un número entero")
-    .min(1, "La cantidad debe ser mayor o igual a 1"),
-  unitPrice: z.coerce
-    .number()
-    .min(0, "El precio unitario debe ser mayor o igual a 0"),
-})
+const saleInputSchema = z
+  .object({
+    date: z
+      .string()
+      .refine((s) => !Number.isNaN(Date.parse(s)), "Fecha inválida"),
+    count: z.coerce
+      .number()
+      .int("La cantidad debe ser un número entero")
+      .min(1, "La cantidad debe ser mayor o igual a 1"),
+    unit: z.enum(["unit", "kilo"]).default("unit"),
+    weight: z.coerce
+      .number()
+      .min(0, "El peso debe ser mayor o igual a 0")
+      .optional()
+      .nullable(),
+    unitPrice: z.coerce
+      .number()
+      .min(0, "El precio debe ser mayor o igual a 0"),
+  })
+  .refine(
+    (d) => d.unit !== "kilo" || (typeof d.weight === "number" && d.weight > 0),
+    { message: "Para venta por kilo, ingresa el peso total (kg) mayor a 0" }
+  )
 
 type RouteCtx = { params: Promise<{ id: string }> }
 
@@ -72,7 +83,7 @@ export async function POST(req: Request, { params }: RouteCtx) {
       { status: 400 }
     )
   }
-  const { date, count, unitPrice } = parsed.data
+  const { date, count, unit, weight, unitPrice } = parsed.data
 
   try {
     const batch = await db.batch.findFirst({
@@ -91,6 +102,8 @@ export async function POST(req: Request, { params }: RouteCtx) {
         batchId: id,
         date: new Date(date),
         count,
+        unit,
+        weight: unit === "kilo" ? weight : null,
         unitPrice,
       },
     })

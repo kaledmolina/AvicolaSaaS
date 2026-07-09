@@ -262,3 +262,31 @@ Stage Summary:
 - Usuario demo (demo@avicola.test/demo123456) con datos sembrados que se reinician en cada login; botón demo en landing y en auth.
 - Landing page con manual de uso de 5 pasos.
 - Credenciales: admin@avicola.test/admin123456 · demo@avicola.test/demo123456.
+
+---
+Task ID: 6
+Agent: main (arquitecto) — venta por kilo
+Task: Añadir modo de venta por kilo además de por unidad (pollo).
+
+Work Log:
+- Schema: añadidos `unit String @default("unit")` ("unit"|"kilo") y `weight Float?` (kg totales) a Sale. db:push + Prisma Client regenerado.
+- Tipos (types.ts): SaleUnit type; Sale ahora tiene unit/weight; SaleInput acepta unit/weight.
+- Helper centralizado (src/lib/sale.ts): saleIncome(sale) → kilo: weight×unitPrice; unit: count×unitPrice. Usado por backend (metrics, admin) y frontend (tabla, preview).
+- Backend:
+  - metrics.ts: totalIncome usa la fórmula según unit.
+  - API POST /api/batches/[id]/sales: valida unit (enum) + weight (>0 si kilo).
+  - API PUT /api/sales/[id]: acepta unit/weight; limpia weight si cambia a unit.
+  - API admin users: select incluye unit/weight; totalIncome usa la nueva fórmula.
+- Seed demo: Lote 1 ahora tiene 1 venta por kilo (150 aves, 300 kg, $8.500/kg = $2.550.000) + 1 por unidad (200 × $11.500).
+- Frontend:
+  - sale-form-dialog: ToggleGroup "Por unidad (pollo)" | "Por kilo"; campos condicionales (Peso total kg + Precio por kilo solo en kilo); preview del ingreso en tiempo real; carga correcta en edición según modo.
+  - sales-tab: columnas Aves, Modo (badge Kilo/Unidad), Detalle (kg o —), Precio (con sufijo "por kg"/"por ave"), Ingreso (saleIncome).
+- BUG corregido: form.watch devuelve strings (pre-zod-coerce); preview usaba typeof===number → $0. Fix: helper toNum() parsea strings.
+- Dev server reiniciado (cliente Prisma cacheado tras db:push).
+- Verificación Agent Browser: demo login → lote con venta kilo sembrada → tabla muestra ambos modos → crear venta kilo (80 aves, 160kg, $9.000 → $1.440.000) → KPIs actualizados → editar venta unit (carga modo unidad) → editar venta kilo (carga modo kilo + peso) → admin panel ingresos agregados correctos ($15.511.400).
+- `bun run lint` → exit 0. dev.log sin errores.
+
+Stage Summary:
+- Las ventas ahora pueden ser por unidad (pollo) o por kilo (peso total × precio/kg).
+- El ingreso se calcula automáticamente según el modo y se propaga a KPIs del lote, admin panel y utilidad.
+- El demo incluye una venta por kilo de ejemplo.

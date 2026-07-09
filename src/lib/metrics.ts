@@ -15,7 +15,7 @@ type BatchRow = {
 type ExpenseRow = { quantity: number; unitPrice: number }
 type MortalityRow = { count: number }
 type WeighingRow = { date: Date; avgWeight: number }
-type SaleRow = { count: number; unitPrice: number }
+type SaleRow = { unit?: string | null; count: number; weight?: number | null; unitPrice: number }
 
 const DAY_MS = 86_400_000
 
@@ -39,7 +39,10 @@ export function computeMetrics(
   const mortalityRate = initialCount > 0 ? (totalMortality / initialCount) * 100 : 0
 
   const totalExpenses = expenses.reduce((s, e) => s + e.quantity * e.unitPrice, 0)
-  const totalIncome = sales.reduce((s, sa) => s + sa.count * sa.unitPrice, 0)
+  const totalIncome = sales.reduce(
+    (s, sa) => s + (sa.unit === "kilo" ? (sa.weight ?? 0) * sa.unitPrice : sa.count * sa.unitPrice),
+    0
+  )
   const profit = totalIncome - totalExpenses
 
   const lastWeighing = weighings.length

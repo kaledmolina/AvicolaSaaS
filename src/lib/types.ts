@@ -59,12 +59,16 @@ export interface Weighing {
   updatedAt: string
 }
 
+export type SaleUnit = "unit" | "kilo"
+
 export interface Sale {
   id: string
   batchId: string
   date: string // ISO
   count: number
-  unitPrice: number
+  unit: SaleUnit
+  weight: number | null // kilos totales vendidos (presente si unit = "kilo")
+  unitPrice: number // precio por unidad (unit) o por kilo (kilo)
   createdAt: string
   updatedAt: string
 }
@@ -100,6 +104,8 @@ export interface WeighingInput {
 export interface SaleInput {
   date: string // ISO
   count: number
+  unit?: SaleUnit
+  weight?: number | null // kilos (requerido si unit = "kilo")
   unitPrice: number
 }
 

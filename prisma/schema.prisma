@@ -90,7 +90,9 @@ model Sale {
   batchId   String
   date      DateTime
   count     Int
-  unitPrice Float
+  unit      String   @default("unit") // "unit" (por pollo) | "kilo" (por kilo)
+  weight    Float?   // kilos totales vendidos (requerido si unit = "kilo")
+  unitPrice Float    // precio por unidad (si unit="unit") o por kilo (si unit="kilo")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

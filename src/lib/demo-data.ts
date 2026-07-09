@@ -61,11 +61,18 @@ export async function resetDemoData(userId: string): Promise<void> {
     ],
   })
 
-  // Ventas parciales
+  // Ventas parciales (mezcla de modos: una por kilo y otra por unidad)
   await db.sale.createMany({
     data: [
-      { batchId: b1.id, date: daysAgo(5), count: 150, unitPrice: 11000 },
-      { batchId: b1.id, date: daysAgo(2), count: 200, unitPrice: 11500 },
+      {
+        batchId: b1.id,
+        date: daysAgo(5),
+        count: 150,
+        unit: "kilo",
+        weight: 300, // 150 aves × ~2 kg
+        unitPrice: 8500, // $/kg
+      },
+      { batchId: b1.id, date: daysAgo(2), count: 200, unit: "unit", unitPrice: 11500 },
     ],
   })
 

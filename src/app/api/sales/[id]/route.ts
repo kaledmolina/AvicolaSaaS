@@ -3,21 +3,35 @@ import { z } from "zod"
 import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/session"
 
-const saleUpdateSchema = z.object({
-  date: z
-    .string()
-    .refine((s) => !Number.isNaN(Date.parse(s)), "Fecha inválida")
-    .optional(),
-  count: z.coerce
-    .number()
-    .int("La cantidad debe ser un número entero")
-    .min(1, "La cantidad debe ser mayor o igual a 1")
-    .optional(),
-  unitPrice: z.coerce
-    .number()
-    .min(0, "El precio unitario debe ser mayor o igual a 0")
-    .optional(),
-})
+const saleUpdateSchema = z
+  .object({
+    date: z
+      .string()
+      .refine((s) => !Number.isNaN(Date.parse(s)), "Fecha inválida")
+      .optional(),
+    count: z.coerce
+      .number()
+      .int("La cantidad debe ser un número entero")
+      .min(1, "La cantidad debe ser mayor o igual a 1")
+      .optional(),
+    unit: z.enum(["unit", "kilo"]).optional(),
+    weight: z.coerce
+      .number()
+      .min(0, "El peso debe ser mayor o igual a 0")
+      .optional()
+      .nullable(),
+    unitPrice: z.coerce
+      .number()
+      .min(0, "El precio debe ser mayor o igual a 0")
+      .optional(),
+  })
+  .refine(
+    (d) =>
+      d.unit !== "kilo" ||
+      (typeof d.weight === "number" && d.weight > 0) ||
+      (d.weight === undefined),
+    { message: "Para venta por kilo, el peso total (kg) debe ser mayor a 0" }
+  )
 
 type RouteCtx = { params: Promise<{ id: string }> }
 
@@ -59,7 +73,16 @@ export async function PUT(req: Request, { params }: RouteCtx) {
     const update: Record<string, unknown> = {}
     if (data.date !== undefined) update.date = new Date(data.date)
     if (data.count !== undefined) update.count = data.count
+    if (data.unit !== undefined) update.unit = data.unit
+    if (data.weight !== undefined) update.weight = data.weight
     if (data.unitPrice !== undefined) update.unitPrice = data.unitPrice
+
+    // Si se cambia el modo a "unit", limpiar el peso; si es "kilo", asegurar peso.
+    if (data.unit === "unit") update.weight = null
+    if (data.unit === "kilo" && update.weight === undefined) {
+      // mantener el peso existente si no se envió
+      delete update.weight
+    }
 
     const updated = await db.sale.update({ where: { id }, data: update })
     return NextResponse.json(updated)
