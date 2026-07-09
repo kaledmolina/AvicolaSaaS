@@ -1,0 +1,98 @@
+// AvicolaSaaS - Gestión integral de granjas avícolas (pollos de engorde)
+// Multi-usuario: cada registro se aísla por userId. Borrado en cascada.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  batches Batch[]
+}
+
+model Batch {
+  id           String   @id @default(cuid())
+  userId       String
+  name         String
+  initialCount Int
+  startDate    DateTime
+  status       String   @default("active") // "active" | "closed"
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expenses   Expense[]
+  mortality  Mortality[]
+  weighings  Weighing[]
+  sales      Sale[]
+
+  @@index([userId])
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  batchId     String
+  description String
+  quantity    Float
+  unitPrice   Float
+  date        DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  batch Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+}
+
+model Mortality {
+  id        String   @id @default(cuid())
+  batchId   String
+  date      DateTime
+  count     Int
+  cause     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  batch Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+}
+
+model Weighing {
+  id        String   @id @default(cuid())
+  batchId   String
+  date      DateTime
+  avgWeight Float // gramos promedio
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  batch Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+}
+
+model Sale {
+  id        String   @id @default(cuid())
+  batchId   String
+  date      DateTime
+  count     Int
+  unitPrice Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  batch Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+}
