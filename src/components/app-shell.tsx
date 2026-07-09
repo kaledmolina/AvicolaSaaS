@@ -8,42 +8,50 @@ import { SiteHeader } from "@/components/site-header"
 import { SiteFooter } from "@/components/site-footer"
 import { Dashboard } from "@/components/dashboard/dashboard"
 import { BatchDetail } from "@/components/batch/batch-detail"
+import { AdminPanel } from "@/components/admin/admin-panel"
+import { useSession } from "next-auth/react"
 
 /**
  * Layout principal de la aplicación autenticada.
- * Encamina vistas según el query param `?batch=ID`:
- *  - sin param  → Dashboard (lista de lotes + KPIs)
- *  - con param  → Detalle del lote
- *
- * `useSearchParams` requiere Suspense en Next 16: el AppShell se sirve ya
- * dentro de un <Suspense> provisto por page.tsx (auth gate).
+ * Encamina vistas según query params:
+ *  - ?view=admin  → Panel de Administración (solo role "admin")
+ *  - ?batch=ID    → Detalle del lote
+ *  - sin param    → Dashboard (lista de lotes + KPIs)
  */
 export function AppShell() {
   const router = useRouter()
   const params = useSearchParams()
-  const batchId = params.get("batch")
+  const { data: session } = useSession()
 
-  // Cierra el detalle si el batchId es inválido (vacío)
+  const view = params.get("view")
+  const batchId = params.get("batch")
+  const role = (session?.user as { role?: string } | undefined)?.role
+  const isAdmin = role === "admin"
+
+  // Limpia params inválidos
   React.useEffect(() => {
-    if (batchId === "") {
-      router.replace("/")
-    }
-  }, [batchId, router])
+    if (batchId === "") router.replace("/")
+    if (view === "admin" && !isAdmin) router.replace("/")
+  }, [batchId, view, isAdmin, router])
+
+  let content: React.ReactNode = <Dashboard />
+  if (view === "admin" && isAdmin) {
+    content = <AdminPanel />
+  } else if (batchId) {
+    content = <BatchDetail batchId={batchId} />
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <SiteHeader />
-      <main className="flex-1">
-        {batchId ? <BatchDetail batchId={batchId} /> : <Dashboard />}
-      </main>
+      <main className="flex-1">{content}</main>
       <SiteFooter />
     </div>
   )
 }
 
 /**
- * Fallback de Suspense para el AppShell: spinner centrado mientras
- * `useSearchParams` se resuelve en el primer render del cliente.
+ * Fallback de Suspense para el AppShell.
  */
 export function AppShellFallback() {
   return (

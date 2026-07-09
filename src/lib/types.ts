@@ -5,10 +5,14 @@
 
 // ---- Entidades base (tal como llegan/van del API) ----
 
+export type UserRole = "user" | "admin"
+
 export interface User {
   id: string
   name: string
   email: string
+  role: UserRole
+  disabled: boolean
   createdAt: string
   updatedAt: string
 }
@@ -134,4 +138,43 @@ export interface BatchDetail {
 
 export interface ApiError {
   error: string
+}
+
+// ---- Super Admin ----
+
+export interface AdminUserSummary {
+  id: string
+  name: string
+  email: string
+  role: UserRole
+  disabled: boolean
+  createdAt: string
+  batchCount: number
+  totalInitial: number
+  currentPopulation: number
+  totalExpenses: number
+  totalIncome: number
+  profit: number
+}
+
+export interface AdminBatchWithMetrics {
+  batch: Batch
+  metrics: BatchMetrics
+}
+
+export interface AdminUserDetail {
+  user: {
+    id: string
+    name: string
+    email: string
+    role: UserRole
+    disabled: boolean
+    createdAt: string
+  }
+  batches: AdminBatchWithMetrics[]
+}
+
+export interface AdminUserUpdate {
+  disabled?: boolean
+  role?: UserRole
 }

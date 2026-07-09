@@ -6,9 +6,10 @@ import { signIn } from "next-auth/react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { Bird, Loader2, LockKeyhole, Mail, User as UserIcon } from "lucide-react"
+import { Bird, Loader2, LockKeyhole, Mail, Play, User as UserIcon } from "lucide-react"
 
 import { ApiError, api } from "@/lib/api"
+import { DEMO_EMAIL, DEMO_PASSWORD } from "@/lib/accounts"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import {
@@ -52,6 +53,29 @@ type RegisterValues = z.infer<typeof registerSchema>
 export function AuthScreen() {
   const { toast } = useToast()
   const router = useRouter()
+  const [demoLoading, setDemoLoading] = React.useState(false)
+
+  async function onDemo() {
+    setDemoLoading(true)
+    try {
+      const res = await signIn("credentials", {
+        redirect: false,
+        email: DEMO_EMAIL,
+        password: DEMO_PASSWORD,
+      })
+      if (!res || res.error) {
+        toast({
+          title: "Demo no disponible",
+          description: "Intenta de nuevo más tarde.",
+          variant: "destructive",
+        })
+        return
+      }
+      router.refresh()
+    } finally {
+      setDemoLoading(false)
+    }
+  }
 
   // ---- Login ----
   const loginForm = useForm<LoginValues>({
@@ -139,7 +163,15 @@ export function AuthScreen() {
       <div className="pointer-events-none absolute -top-24 -right-24 size-72 rounded-full bg-primary/10 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-24 -left-24 size-72 rounded-full bg-accent/40 blur-3xl" />
 
-      <div className="absolute right-4 top-4">
+      <div className="absolute right-4 top-4 flex items-center gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => router.push("/")}
+          className="text-muted-foreground"
+        >
+          Volver al inicio
+        </Button>
         <ThemeToggle />
       </div>
 
@@ -305,6 +337,36 @@ export function AuthScreen() {
             </Tabs>
           </CardHeader>
         </Card>
+
+        <div className="mt-4 flex flex-col gap-3">
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center">
+              <span className="bg-card px-3 text-xs text-muted-foreground">
+                o
+              </span>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 w-full gap-2"
+            onClick={onDemo}
+            disabled={demoLoading}
+          >
+            {demoLoading ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Play className="size-4 text-primary" />
+            )}
+            {demoLoading ? "Entrando…" : "Probar como demo"}
+          </Button>
+          <p className="text-center text-xs text-muted-foreground">
+            Demo: <span className="font-medium">{DEMO_EMAIL}</span> / {DEMO_PASSWORD}
+          </p>
+        </div>
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
           Tus datos se guardan de forma segura. COP · Colombia · Pollos de

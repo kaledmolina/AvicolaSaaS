@@ -1,8 +1,9 @@
 "use client"
 
 import * as React from "react"
-import { Bird, LogOut } from "lucide-react"
+import { Bird, LogOut, ShieldCheck } from "lucide-react"
 import { signOut, useSession } from "next-auth/react"
+import { useRouter } from "next/navigation"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -22,7 +23,10 @@ import { ThemeToggle } from "@/components/theme-toggle"
  */
 export function SiteHeader() {
   const { data: session } = useSession()
+  const router = useRouter()
   const user = session?.user
+  const role = (user as { role?: string } | undefined)?.role
+  const isAdmin = role === "admin"
 
   const initials = React.useMemo(() => {
     const name = user?.name || user?.email || "U"
@@ -35,7 +39,12 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
-        <div className="flex items-center gap-2.5">
+        <button
+          type="button"
+          onClick={() => router.push("/")}
+          className="flex items-center gap-2.5 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="Ir al panel"
+        >
           <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
             <Bird className="size-5" />
           </span>
@@ -47,9 +56,20 @@ export function SiteHeader() {
               Gestión avícola
             </span>
           </div>
-        </div>
+        </button>
 
         <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-2"
+              onClick={() => router.push("/?view=admin")}
+            >
+              <ShieldCheck className="size-4 text-primary" />
+              <span className="hidden sm:inline">Admin</span>
+            </Button>
+          )}
           <ThemeToggle />
           {user && (
             <DropdownMenu>
