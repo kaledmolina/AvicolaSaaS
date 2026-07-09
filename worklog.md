@@ -307,3 +307,26 @@ Work Log:
 Stage Summary:
 - El panel de super-admin ahora es accesible de 3 formas evidentes: botón destacado en header, entrada en menú de usuario, y aviso con botón en el dashboard.
 - Credenciales admin: admin@avicola.test / admin123456.
+
+---
+Task ID: 8
+Agent: main (arquitecto) — cursor pointer global
+Task: Aplicar cursor pointer en TODOS los botones y opciones interactivas.
+
+Work Log:
+- Diagnóstico: la mayoría de componentes usan <Button> (cubiertos por regla simple), pero algunos componentes shadcn/Radix (DropdownMenuItem, etc.) traen `cursor-default` hardcodeado en su className, y las reglas en @layer base pierden prioridad contra las utilities de Tailwind v4.
+- Solución: reglas CSS globales FUERA de @layer (mayor prioridad que utilities) con !important, cubriendo:
+  - button, [role=button], a, summary, label[for]
+  - [role=menuitem], [role=menuitemradio], [role=menuitemcheckbox], [role=tab], [role=option], [role=combobox]
+  - data-slot de todos los triggers Radix: dropdown-menu-item, select-trigger, toggle-group-item, tabs-trigger, accordion-trigger, collapsible-trigger, tooltip-trigger, popover-trigger, dialog-trigger, alert-dialog-trigger, hover-card-trigger, context-menu-trigger, menubar-trigger/item, navigation-menu-trigger/link
+  - data-radix-collection-item (fallback para items de colección Radix)
+- Estados deshabilitados → cursor: not-allowed (disabled, aria-disabled, data-disabled).
+- Inputs de texto/fecha/número/textarea → cursor: text (no pointer).
+- Checkbox/Radio nativos → cursor: pointer.
+- Verificación Agent Browser (computed style): button=pointer, batchCard(role=button)=pointer, themeToggle=pointer, userMenu=pointer, dropdownMenuItems=pointer (x2), tabs=pointer (x4), editIcon/deleteIcon=pointer, select-trigger=pointer, toggle-group-item=pointer, numberInput=text, admin kebabs=pointer, landing links=pointer (x4), demo button=pointer.
+- `bun run lint` → exit 0. Sin errores de página ni dev.log.
+
+Stage Summary:
+- Cursor pointer aplicado de forma consistente en TODA la app: botones, enlaces, tabs, selects, toggles, dropdown items, tarjetas clickeables, icon buttons, menús Radix.
+- Inputs de texto mantienen cursor-text; elementos deshabilitados muestran not-allowed.
+- Sin tocar componentes ui de shadcn (cambio puramente en globals.css).
