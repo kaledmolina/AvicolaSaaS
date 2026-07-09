@@ -61,13 +61,14 @@ export function SiteHeader() {
         <div className="flex items-center gap-2">
           {isAdmin && (
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
-              className="gap-2"
+              className="gap-1.5 border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary"
               onClick={() => router.push("/?view=admin")}
+              aria-label="Panel de administración"
             >
-              <ShieldCheck className="size-4 text-primary" />
-              <span className="hidden sm:inline">Admin</span>
+              <ShieldCheck className="size-4" />
+              <span className="font-semibold">Admin</span>
             </Button>
           )}
           <ThemeToggle />
@@ -98,7 +99,34 @@ export function SiteHeader() {
                   <span className="truncate text-xs font-normal text-muted-foreground">
                     {user.email}
                   </span>
+                  {isAdmin && (
+                    <span className="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                      <ShieldCheck className="size-3" />
+                      Administrador
+                    </span>
+                  )}
                 </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault()
+                    router.push("/")
+                  }}
+                >
+                  <Bird className="size-4" />
+                  Mis lotes
+                </DropdownMenuItem>
+                {isAdmin && (
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault()
+                      router.push("/?view=admin")
+                    }}
+                  >
+                    <ShieldCheck className="size-4 text-primary" />
+                    Panel de administración
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   variant="destructive"

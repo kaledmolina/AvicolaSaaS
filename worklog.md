@@ -290,3 +290,20 @@ Stage Summary:
 - Las ventas ahora pueden ser por unidad (pollo) o por kilo (peso total × precio/kg).
 - El ingreso se calcula automáticamente según el modo y se propaga a KPIs del lote, admin panel y utilidad.
 - El demo incluye una venta por kilo de ejemplo.
+
+---
+Task ID: 7
+Agent: main (arquitecto) — fix visibilidad panel admin
+Task: El login como admin mostraba el dashboard sin forma evidente de acceder al panel de super-admin.
+
+Work Log:
+- Diagnóstico: la sesión SÍ llevaba role="admin" correctamente. El problema era de UX: el botón "Admin" del header usaba `hidden sm:inline` → en móvil solo mostraba un ícono sin aria-label, indetectable. Además el admin aterriza en el Dashboard (comportamiento correcto) pero no había ningún aviso que le indicara que tiene acceso admin.
+- Fix 1 (site-header.tsx): botón Admin ahora siempre muestra texto "Admin", con estilo destacado (bg-primary/10, border-primary/30, font-semibold), aria-label="Panel de administración".
+- Fix 2 (site-header.tsx): menú de usuario ahora incluye badge "Administrador" junto al nombre, entrada "Mis lotes" y entrada "Panel de administración" (además de "Cerrar sesión").
+- Fix 3 (dashboard.tsx): aviso destacado en la parte superior del dashboard para admins — borde primary, icono ShieldCheck, texto "Tienes acceso de administrador" + botón "Ir al Panel de Administración". Visible en móvil y escritorio.
+- Verificación Agent Browser (viewport 390 y 1440): login admin → banner visible → clic → panel admin carga con tabla de usuarios (incluye "Administrador(tú)"). Sin errores.
+- `bun run lint` → exit 0. dev.log limpio.
+
+Stage Summary:
+- El panel de super-admin ahora es accesible de 3 formas evidentes: botón destacado en header, entrada en menú de usuario, y aviso con botón en el dashboard.
+- Credenciales admin: admin@avicola.test / admin123456.

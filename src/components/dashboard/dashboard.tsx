@@ -7,8 +7,11 @@ import {
   FolderClosed,
   Loader2,
   Plus,
+  ShieldCheck,
   Users,
 } from "lucide-react"
+import { useSession } from "next-auth/react"
+import { useRouter } from "next/navigation"
 
 import { formatNumber } from "@/lib/format"
 import type { Batch } from "@/lib/types"
@@ -26,6 +29,9 @@ export function Dashboard() {
   const { data: batches, isLoading, isError } = useBatches()
   const [createOpen, setCreateOpen] = React.useState(false)
   const [editBatch, setEditBatch] = React.useState<Batch | null>(null)
+  const { data: session } = useSession()
+  const router = useRouter()
+  const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin"
 
   const list = batches ?? []
 
@@ -35,6 +41,33 @@ export function Dashboard() {
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+      {/* Aviso para administradores */}
+      {isAdmin && (
+        <div className="mb-6 flex flex-col items-start gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+              <ShieldCheck className="size-5" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold">
+                Tienes acceso de administrador
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Gestiona todos los usuarios de la plataforma, activa o
+                desactiva cuentas y revisa su actividad.
+              </p>
+            </div>
+          </div>
+          <Button
+            onClick={() => router.push("/?view=admin")}
+            className="h-9 shrink-0"
+          >
+            <ShieldCheck className="size-4" />
+            Ir al Panel de Administración
+          </Button>
+        </div>
+      )}
+
       {/* Encabezado */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
