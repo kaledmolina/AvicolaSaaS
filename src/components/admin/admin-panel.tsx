@@ -28,6 +28,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { AdminUsersTable } from "@/components/admin/admin-users-table"
 import { AdminUserDetailDialog } from "@/components/admin/admin-user-detail-dialog"
+import { BackupSection } from "@/components/admin/backup-section"
 
 export function AdminPanel() {
   const router = useRouter()
@@ -132,6 +133,9 @@ export function AdminPanel() {
           />
         )}
       </div>
+
+      {/* Copia de seguridad / Restauración */}
+      <BackupSection />
 
       {/* Diálogo de detalle */}
       <AdminUserDetailDialog

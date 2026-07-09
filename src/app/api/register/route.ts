@@ -2,14 +2,44 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { db } from "@/lib/db"
 import { hashPassword } from "@/lib/password"
+import { rateLimit, getClientIp } from "@/lib/rate-limit"
+
+// Validación de contraseña robusta:
+//  - mínimo 8 caracteres
+//  - al menos una letra
+//  - al menos un número
+const passwordSchema = z
+  .string()
+  .min(8, "La contraseña debe tener al menos 8 caracteres")
+  .max(100, "Contraseña demasiado larga")
+  .refine((p) => /[a-zA-Z]/.test(p), "Debe incluir al menos una letra")
+  .refine((p) => /\d/.test(p), "Debe incluir al menos un número")
 
 const schema = z.object({
-  name: z.string().min(1, "El nombre es obligatorio").max(80),
-  email: z.string().email("Email inválido"),
-  password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres").max(100),
+  name: z
+    .string()
+    .min(1, "El nombre es obligatorio")
+    .max(80, "El nombre es demasiado largo")
+    .refine((n) => n.trim().length > 0, "El nombre es obligatorio"),
+  email: z.string().email("Email inválido").max(200),
+  password: passwordSchema,
 })
 
+// Rate limit de registro: 5 cuentas por IP cada hora (anti-abuso).
+const REGISTER_MAX = 5
+const REGISTER_WINDOW = 60 * 60 * 1000
+
 export async function POST(req: Request) {
+  // Rate limiting
+  const ip = getClientIp(req)
+  const rl = rateLimit(`register:${ip}`, REGISTER_MAX, REGISTER_WINDOW)
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Demasiados registros. Intenta más tarde." },
+      { status: 429 }
+    )
+  }
+
   let body: unknown
   try {
     body = await req.json()

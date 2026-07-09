@@ -42,7 +42,11 @@ type LoginValues = z.infer<typeof loginSchema>
 const registerSchema = z.object({
   name: z.string().min(2, "Tu nombre es muy corto"),
   email: z.string().email("Correo inválido"),
-  password: z.string().min(6, "Mínimo 6 caracteres"),
+  password: z
+    .string()
+    .min(8, "Mínimo 8 caracteres")
+    .refine((p) => /[a-zA-Z]/.test(p), "Debe incluir una letra")
+    .refine((p) => /\d/.test(p), "Debe incluir un número"),
 })
 type RegisterValues = z.infer<typeof registerSchema>
 
@@ -95,7 +99,10 @@ export function AuthScreen() {
       if (!res || res.error) {
         toast({
           title: "Error de acceso",
-          description: "Email o contraseña incorrectos",
+          description:
+            res?.error === "CredentialsSignin"
+              ? "Email o contraseña incorrectos"
+              : res?.error ?? "Email o contraseña incorrectos",
           variant: "destructive",
         })
         return
@@ -315,7 +322,7 @@ export function AuthScreen() {
                         id="reg-password"
                         type="password"
                         autoComplete="new-password"
-                        placeholder="Mínimo 6 caracteres"
+                        placeholder="Mínimo 8 caracteres, una letra y un número"
                         aria-invalid={!!registerForm.formState.errors.password}
                         {...registerForm.register("password")}
                       />

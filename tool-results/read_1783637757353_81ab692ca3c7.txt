@@ -1,0 +1,333 @@
+     1→     1→     1→# AvícolaSaaS — Worklog compartido
+     2→     2→     2→
+     3→     3→     3→Proyecto: SaaS multi-usuario para gestión integral de granjas avícolas (pollos de engorde).
+     4→     4→     4→Stack: Next.js 16 (App Router) · TypeScript 5 · Tailwind CSS 4 · shadcn/ui (New York) · Prisma (SQLite) · NextAuth v4 (Credentials/JWT) · TanStack Query · recharts.
+     5→     5→     5→
+     6→     6→     6→Ruta visible única: `/` (aplicación de una sola página con gestión de vistas en cliente).
+     7→     7→     7→API: bajo `/api/*` con aislamiento estricto por `userId` (sesión JWT).
+     8→     8→     8→
+     9→     9→     9→---
+    10→    10→    10→Task ID: 1
+    11→    11→    11→Agent: main (arquitecto)
+    12→    12→    12→Task: Foundation — schema Prisma, tipos compartidos, auth (NextAuth + registro), providers, tema verde agrícola, utilidades de cliente.
+    13→    13→    13→
+    14→    14→    14→Work Log:
+    15→    15→    15→- Definí `prisma/schema.prisma` con modelos User, Batch, Expense, Mortality, Weighing, Sale. Relaciones 1:N con `onDelete: Cascade` (User→Batch en el FK; Batch→hijos en el FK de cada hijo). Índices en `userId` y `batchId`.
+    16→    16→    16→- Ejecuté `bun run db:push` (tablas creadas + Prisma Client generado).
+    17→    17→    17→- Creé `src/lib/types.ts` con todas las entidades, DTOs de entrada, `BatchMetrics` y `BatchDetail` (contrato frontend↔backend).
+    18→    18→    18→- Creé `src/lib/password.ts` (hash/verify con scrypt nativo de Node, sin dependencias).
+    19→    19→    19→- Configuré NextAuth v4 en `src/lib/auth.ts` (CredentialsProvider, JWT, callbacks que adjuntan `userId` al token y sesión). Helper `getCurrentUser()` en `src/lib/session.ts`.
+    20→    20→    20→- Ruta `src/app/api/auth/[...nextauth]/route.ts` y `src/app/api/register/route.ts` (validación con zod, email normalizado, contraseña hasheada).
+    21→    21→    21→- Providers: `src/components/providers.tsx` (SessionProvider + QueryClientProvider + ThemeProvider next-themes) y `src/components/theme-provider.tsx`.
+    22→    22→    22→- Actualicé `src/app/layout.tsx` (lang="es", metadata, envoltura en Providers).
+    23→    23→    23→- Tema verde agrícola en `src/app/globals.css` (primary verde oklch(0.52 0.13 150), charts verde/ámbar/terracota, scrollbar custom `.scroll-thin`).
+    24→    24→    24→- Utilidades cliente: `src/lib/api.ts` (fetch con ApiError), `src/lib/format.ts` (COP, fechas es-CO/America/Bogota), `src/lib/queries.ts` (claves de query).
+    25→    25→    25→
+    26→    26→    26→Stage Summary:
+    27→    27→    27→- Base lista para que subagents construyan API (Task 2) y frontend (Task 3) sobre el contrato de tipos.
+    28→    28→    28→- Moneda: COP. Zona horaria: America/Bogota. Idioma UI: español.
+    29→    29→    29→- Auth lista: registro vía POST /api/register, login vía NextAuth credentials. Sesión JWT con `session.user.id`.
+    30→    30→    30→- Pendiente: el frontend debe usar `useSession` (client) y el API `getCurrentUser()` (server) para el aislamiento.
+    31→    31→    31→
+    32→    32→    32→---
+    33→    33→    33→Task ID: 2
+    34→    34→    34→Agent: full-stack-developer (API)
+    35→    35→    35→Task: Backend API routes — CRUD completo para Lotes (Batches) y sus recursos hijos (Expenses, Mortality, Weighings, Sales) con aislamiento estricto por usuario y cálculo de métricas.
+    36→    36→    36→
+    37→    37→    37→Work Log:
+    38→    38→    38→- Leí `worklog.md` (Task 1) y los archivos base: `src/lib/types.ts`, `src/lib/session.ts`, `src/lib/auth.ts`, `prisma/schema.prisma`, `src/app/api/register/route.ts` para alinearme al contrato de tipos y a las convenciones de respuestas (zod + 400 con `error: <primer mensaje>`, 401 "No autenticado", 500 "Error interno del servidor").
+    39→    39→    39→- Creé `src/lib/metrics.ts` con `computeMetrics(batch, expenses, mortality, weighings, sales)` que recibe filas crudas de Prisma (Date objects) y devuelve un `BatchMetrics` exactamente con la forma de `src/lib/types.ts`. Calcula totalMortality, totalSold, currentPopulation, mortalityRate (%), totalExpenses (Σ quantity*unitPrice), totalIncome (Σ count*unitPrice), profit, conteos, lastWeighing (último por fecha desc) y daysOld (Math.floor((now - startDate)/86400000), floor en 0).
+    40→    40→    40→- Creé `src/app/api/batches/route.ts`:
+    41→    41→    41→  - GET → lista `db.batch.findMany({ where:{ userId }, orderBy:{ createdAt:"desc" }})`.
+    42→    42→    42→  - POST → zod valida `BatchInput` (name 1..120, initialCount int ≥1, startDate ISO válido, status enum opcional default "active", notes ≤1000 nullable opcional). Guarda `startDate: new Date(startDate)`, normaliza `notes` vacío a `null`. 201.
+    43→    43→    43→- Creé `src/app/api/batches/[id]/route.ts`:
+    44→    44→    44→  - GET → `findFirst({ id, userId })` (404 "Lote no encontrado" si no existe o es ajeno), luego `Promise.all` para cargar expenses/mortality/weighings/sales (todos `orderBy: { date: "desc" }`), `computeMetrics(...)`, retorna `BatchDetail { batch, metrics, expenses, mortality, weighings, sales }`.
+    45→    45→    45→  - PUT → zod `Partial<BatchInput>` (todos opcionales). Verifica propiedad, construye `update` solo con campos presentes, convierte `startDate` a Date, normaliza `notes`. 200.
+    46→    46→    46→  - DELETE → verifica propiedad, `db.batch.delete` (cascade elimina hijos), 204 con `new NextResponse(null, { status: 204 })`.
+    47→    47→    47→  - `params` se `await` (Next 16 Promise params).
+    48→    48→    48→- Creé 4 rutas batch-scoped (`src/app/api/batches/[id]/{expenses,mortality,weighings,sales}/route.ts`), cada una con GET (lista ordenada date desc) y POST (valida su DTO con zod, verifica propiedad del lote antes de crear, 201). Campos: expense (description 1..200, quantity>0, unitPrice≥0, date), mortality (date, count int≥1, cause ≤200 nullable), weighing (date, avgWeight>0), sale (date, count int≥1, unitPrice≥0). Strings vacíos de `cause` → null.
+    49→    49→    49→- Creé 4 rutas resource-scoped (`src/app/api/{expenses,mortality,weighings,sales}/[id]/route.ts`) con PUT y DELETE. Patrón de aislamiento: `findUnique({ where:{ id }, include:{ batch:{ select:{ userId:true }} }})` y verificar `resource.batch.userId === user.id`; si no coincide → 404 "Registro no encontrado" (nunca 403, no filtra existencia). DELETE → 204.
+    50→    50→    50→- Ejecuté `bun run lint` → sin errores ni warnings en mis archivos.
+    51→    51→    51→- Revisé `dev.log`: servidor en puerto 3000 sigue saludable, sin errores de compilación.
+    52→    52→    52→
+    53→    53→    53→Stage Summary:
+    54→    54→    54→- Archivos creados (11):
+    55→    55→    55→  1. `src/lib/metrics.ts`
+    56→    56→    56→  2. `src/app/api/batches/route.ts`
+    57→    57→    57→  3. `src/app/api/batches/[id]/route.ts`
+    58→    58→    58→  4. `src/app/api/batches/[id]/expenses/route.ts`
+    59→    59→    59→  5. `src/app/api/batches/[id]/mortality/route.ts`
+    60→    60→    60→  6. `src/app/api/batches/[id]/weighings/route.ts`
+    61→    61→    61→  7. `src/app/api/batches/[id]/sales/route.ts`
+    62→    62→    62→  8. `src/app/api/expenses/[id]/route.ts`
+    63→    63→    63→  9. `src/app/api/mortality/[id]/route.ts`
+    64→    64→    64→  10. `src/app/api/weighings/[id]/route.ts`
+    65→    65→    65→  11. `src/app/api/sales/[id]/route.ts`
+    66→    66→    66→- Contrato API completo implementado: 5 recursos × (GET list, POST create, GET detail/PUT/DELETE) con métricas calculadas en `GET /api/batches/[id]`.
+    67→    67→    67→- Aislamiento de datos garantizado en TODOS los handlers: `getCurrentUser()` → 401; batch-scoped filtra por `userId`; resource-scoped verifica `batch.userId === user.id` y devuelve 404 (no 403) para datos ajenos.
+    68→    68→    68→- `params` siempre awaited (Next 16). `NextResponse.json` serializa Date → ISO string automáticamente, coincidiendo con los tipos `string` ISO del contrato.
+    69→    69→    69→- `bun run lint` pasa limpio. Listo para que el frontend (Task 3) consuma `/api/batches`, `/api/batches/[id]` (BatchDetail con metrics) y los endpoints de hijos.
+    70→    70→    70→
+    71→    71→    71→---
+    72→    72→    72→Task ID: 3
+    73→    73→    73→Agent: full-stack-developer (Frontend)
+    74→    74→    74→Task: Frontend SPA completo (route `/`) para AvícolaSaaS — auth gate, dashboard de lotes, detalle de lote con KPIs dinámicos, tabs de gastos/mortalidad/pesajes/ventas, formularios CRUD con react-hook-form + zod, integración con TanStack Query sobre el contrato del Task 2.
+    75→    75→    75→
+    76→    76→    76→Work Log:
+    77→    77→    77→- Leí `worklog.md`, `src/lib/{types,api,format,queries,utils}.ts`, providers, layout, globals.css y los primitives shadcn disponibles (button, card, dialog, dropdown-menu, select, table, tabs, alert-dialog, badge, input, label, textarea, skeleton, separator, avatar) para alinear el frontend con la base del Task 1.
+    78→    78→    78→- Creé `src/hooks/use-batches.ts` con hooks de TanStack Query para batches y todas las entidades hijas (CRUD + invalidación de `qk.batches` y `qk.batchDetail(batchId)`). Convención: el hook devuelve la mutación, el componente llama `mutateAsync` y muestra toasts en try/catch.
+    79→    79→    79→- `src/components/theme-toggle.tsx`: botón outline size-icon con `useTheme()` de next-themes, hidratación segura (mounted) y aria-label.
+    80→    80→    80→- `src/components/site-header.tsx`: barra superior sticky con blur, marca con icono `Bird`, ThemeToggle y DropdownMenu de usuario con iniciales + email + "Cerrar sesión" (`signOut({callbackUrl:"/"})`).
+    81→    81→    81→- `src/components/site-footer.tsx`: footer `border-t` con copyright y microcopy; queda fijado abajo por el `flex min-h-screen flex-col` del AppShell.
+    82→    82→    82→- `src/components/auth/auth-screen.tsx`: card centrada (max-w-md) sobre gradiente verde con blobs, brand con `Bird`, Tabs "Iniciar sesión | Crear cuenta". Login con `signIn("credentials", {redirect:false})` + toasts de error/éxito + `router.refresh()`. Registro con `api.post("/api/register", ...)` + auto `signIn` + `router.refresh()`. Esquemas zod inline (email, password min 6 para registro).
+    83→    83→    83→- `src/components/dashboard/batch-card.tsx`: Card clickeable (role=button, Enter/Space) que abre `/?batch=ID`; dropdown kebab con Editar / Cerrar-Reabrir (PUT status) / Eliminar (AlertDialog → DELETE → invalidate). status Badge activo/cerrado. Días calculados cliente-side desde `startDate`.
+    84→    84→    84→- `src/components/dashboard/batch-form-dialog.tsx`: Dialog create/edit con name, initialCount (coerce.int.min 1), startDate (date default today), status (Select active/closed), notes (Textarea opcional). Reset con `useEffect` al abrir/cambiar batch. PUT/POST según modo.
+    85→    85→    85→- `src/components/dashboard/dashboard.tsx`: heading + KPI tiles (total lotes, activos, cerrados, Σ initialCount — solo del listado, sin fetch de detalles), grid responsive `sm:grid-cols-2 lg:grid-cols-3`, skeletons al cargar, EmptyState con CTA, BatchCard con onEdit. Maneja isError con mensaje + reintentar.
+    86→    86→    86→- `src/components/batch/kpi-cards.tsx`: 6 tarjetas (Población actual, Mortalidad %, Gastos totales, Ingresos totales, Utilidad con color auto verde/rojo, Último peso) en grid `grid-cols-2 md:grid-cols-3 xl:grid-cols-6`. Iconos en cuadro tintado (primary/muted/danger/success) según tono. Etiquetas uppercase muted, valor 2xl bold tabular-nums.
+    87→    87→    87→- `src/components/batch/forms/*`: 4 formularios (expense, mortality, weighing, sale) con zod + coerce.number, defaults saneados (date=today), reset al abrir, POST a `/api/batches/:id/<entity>` o PUT `/api/<entity>/:id`, invalidación de detail+batches, toasts en try/catch.
+    88→    88→    88→- `src/components/batch/tabs/expenses-tab.tsx`: header con título + count + botón "Añadir", Card con tabla envuelta en `max-h-[28rem] overflow-y-auto scroll-thin` (header sticky), columnas Fecha/Descripción/Cantidad/V.Unitario/Total/Acciones (lápiz + papelera), AlertDialog de confirmación, EmptyState dentro de la Card.
+    89→    89→    89→- `src/components/batch/tabs/mortality-tab.tsx`: misma estructura, columnas Fecha/Cantidad/Causa/Acciones; muestra "—" si no hay causa.
+    90→    90→    90→- `src/components/batch/tabs/weighings-tab.tsx`: incluye Card con `LineChart` de recharts (Curva de crecimiento) que ordena los pesajes por fecha asc, X = formatDateShort, Y = avgWeight (g); tooltip con estilo CSS vars del tema (verde primary). Hint muted si <2 puntos. Debajo, tabla Fecha/Peso promedio/Acciones.
+    91→    91→    91→- `src/components/batch/tabs/sales-tab.tsx`: tabla Fecha/Cantidad/P.Unitario/Ingreso (count*unitPrice)/Acciones.
+    92→    92→    92→- `src/components/batch/batch-detail.tsx`: back button (router.push("/")), header Card con nombre+status badge+ingresados+inicio+día+notes, acciones Editar/Cerrar-Reabrir/Eliminar (AlertDialog → DELETE → router.push("/")), `<KpiCards/>`, `<Tabs defaultValue="expenses">` con 4 triggers que incluyen count badges, TabsContent renderiza cada tab pasando `batchId` y los arrays del detail (sin fetches extra). Skeletons mientras carga; estado 404 con back button + mensaje.
+    93→    93→    93→- `src/components/app-shell.tsx`: `flex min-h-screen flex-col bg-background` → SiteHeader / main flex-1 / SiteFooter (mt-auto natural). Lee `useSearchParams().get("batch")` para encaminar Dashboard vs BatchDetail. Exporta `AppShellFallback` (spinner) para Suspense.
+    94→    94→    94→- `src/app/page.tsx`: `'use client'`, `useSession()`. loading → spinner full-screen con Loader2; unauthenticated → `<AuthScreen/>`; authenticated → `<Suspense fallback={<AppShellFallback/>}><AppShell/></Suspense>` (Suspense obligatorio por `useSearchParams`).
+    95→    95→    95→
+    96→    96→    96→Stage Summary:
+    97→    97→    97→- 20 archivos creados exactamente bajo la estructura requerida (page.tsx, site-header, site-footer, theme-toggle, auth/auth-screen, app-shell, dashboard/{dashboard,batch-card,batch-form-dialog}, batch/{batch-detail,kpi-cards}, batch/tabs/{expenses,mortality,weighings,sales}-tab, batch/forms/{expense,mortality,weighing,sale}-form-dialog, hooks/use-batches).
+    98→    98→    98→- `bun run lint` pasa sin errores (exit 0). Dev server responde 200 en `/` sin errores de compilación.
+    99→    99→    99→- Sin imports desde `src/app/api/**` ni `src/lib/**` fuera de los exports permitidos (types, api, format, queries, utils). No se tocó prisma, .env, layout, globals.css, providers, theme-provider ni `src/components/ui/**`.
+   100→   100→   100→- UI 100% en español, moneda COP (sin decimales), fechas es-CO, tema verde agrícola (sin indigo/azul). Responsive mobile-first, targets ≥40px, focus rings, ARIA labels en iconos, sticky footer con `mt-auto`, skeletons/spinners en cargas, AlertDialog en todas las eliminaciones, toasts vía `useToast`.
+   101→   101→   101→- Recharts integrado con variables CSS del tema (stroke var(--primary)) para mantener la paleta verde; chart oculto con hint si <2 pesajes.
+   102→   102→   102→- Convención consistente: cada mutación invalida `qk.batches` + `qk.batchDetail(batchId)`; los componentes llamadores envuelven `mutateAsync` en try/catch y muestran toasts (`useToast`).
+   103→   103→   103→
+   104→   104→   104→---
+   105→   105→   105→Task ID: 4
+   106→   106→   106→Agent: main (arquitecto) — integración y verificación
+   107→   107→   107→Task: Verificación end-to-end con Agent Browser, lint, responsividad, sticky footer y aislamiento de datos.
+   108→   108→   108→
+   109→   109→   109→Work Log:
+   110→   110→   110→- Lanzados en paralelo dos subagents (Task 2 API, Task 3 Frontend) sobre el contrato de tipos compartido. Ambos reportaron lint limpio.
+   111→   111→   111→- Verificación con Agent Browser en http://localhost:3000/:
+   112→   112→   112→  - Pantalla de auth (login/register) renderiza con tema verde, toggle de tema.
+   113→   113→   113→  - Registro de usuario "Juan Granjero" + auto-login → dashboard con KPIs agregados y estado vacío.
+   114→   114→   114→  - Crear lote "Galpón A - Lote 5" (500 aves) → aparece en grid clickeable.
+   115→   115→   115→  - Detalle del lote: 6 tarjetas KPI dinámicas (Población, Mortalidad %, Gastos, Ingresos, Utilidad, Último peso) + header + 4 tabs.
+   116→   116→   116→  - CRUD completo por tab: Gasto (10×$45.000), Mortalidad (12 aves → 2,4%), 2 Pesajes (gráfico recharts de crecimiento), Venta (200×$18.000).
+   117→   117→   117→  - Cálculos en tiempo real verificados: Población 288 (500−12−200), Gastos $450.000, Ingresos $3.600.000, Utilidad $3.150.000, Último peso 180g.
+   118→   118→   118→  - Eliminación de gasto con diálogo de confirmación → KPIs vuelven a $0.
+   119→   119→   119→  - Logout → registro de segundo usuario "María" → dashboard VACÍO (0 lotes): aislamiento de datos confirmado.
+   120→   120→   120→  - Footer sticky: en página corta bottom=844=viewport (sin hueco); en página larga empujado naturalmente (sin superposición).
+   121→   121→   121→  - Viewport móvil 390×844 y desktop 1440×900 verificados.
+   122→   122→   122→- `bun run lint` → exit 0. dev.log sin errores/warnings de hidratación ni runtime.
+   123→   123→   123→
+   124→   124→   124→Stage Summary:
+   125→   125→   125→- Aplicación SaaS completa y funcional en la ruta única `/`.
+   126→   126→   126→- Multi-usuario con aislamiento estricto (sesión JWT + filtro por userId en todo el API; recursos ajenos devuelven 404).
+   127→   127→   127→- Cero errores de consola, lint limpio, footer sticky, responsive.
+   128→   128→   128→- Entregables del usuario cubiertos: (1) arquitectura + stack, (2) schema.prisma con cascade, (3) interfaces TS en src/lib/types.ts, (4) vista Detalle del Lote con cálculos dinámicos — además de la app completa y verificada.
+   129→   129→   129→
+   130→   130→   130→---
+   131→   131→   131→Task ID: 5-foundation
+   132→   132→   132→Agent: main (arquitecto) — fase 2
+   133→   133→   133→Task: Super-admin, paleta naranja, usuario demo y base para landing.
+   134→   134→   134→
+   135→   135→   135→Work Log:
+   136→   136→   136→- Schema: añadí `role String @default("user")` y `disabled Boolean @default(false)` a User. db:push OK.
+   137→   137→   137→- Tipos (src/lib/types.ts): UserRole, campos role/disabled en User, y tipos admin: AdminUserSummary, AdminUserDetail, AdminBatchWithMetrics, AdminUserUpdate.
+   138→   138→   138→- Cuentas especiales (src/lib/accounts.ts): DEMO_EMAIL/PASSWORD, ADMIN_EMAIL/PASSWORD, isDemoEmail().
+   139→   139→   139→- Datos demo (src/lib/demo-data.ts): resetDemoData(userId) recrea 2 lotes (1 activo, 1 cerrado) con gastos/mortalidad/pesajes/ventas realistas. Se invoca en cada login demo.
+   140→   140→   140→- Seed (prisma/seed.ts): upsert admin (admin@avicola.test/admin123456, role admin) + demo (demo@avicola.test/demo123456) con datos. Ejecutado OK.
+   141→   141→   141→- Auth (src/lib/auth.ts): authorize rechaza disabled; si es demo → resetDemoData; JWT/session ahora incluyen `role`.
+   142→   142→   142→- Session (src/lib/session.ts): getCurrentUser() devuelve role; requireAdmin() helper (401/403).
+   143→   143→   143→- API admin: GET /api/admin/users (lista + stats agregadas), GET /api/admin/users/[id] (detalle + lotes + metrics), PATCH (toggle disabled/role). Protecciones: no auto-desactivarse; demo no se puede bloquear (se reactiva solo). Guard 401/403 verificado con curl.
+   144→   144→   144→- Paleta NARANJA en globals.css (hue ~50-55 oklch). Primary oklch(0.64 0.18 48), charts naranja/ámbar/terracota. Light + dark.
+   145→   145→   145→- qk.adminUsers / qk.adminUser añadidos.
+   146→   146→   146→
+   147→   147→   147→Stage Summary:
+   148→   148→   148→- Listo para subagents: Landing page (Task 3) y Admin panel UI (Task 4).
+   149→   149→   149→- Contrato admin API: GET /api/admin/users → AdminUserSummary[]; GET /api/admin/users/:id → AdminUserDetail; PATCH /api/admin/users/:id {disabled?,role?}.
+   150→   150→   150→- Credenciales: admin@avicola.test/admin123456 · demo@avicola.test/demo123456.
+   151→   151→   151→- page.tsx y app-shell.tsx aún NO modificados (los hará el main tras los subagents): routing será landing por defecto (no-auth), ?auth=1 → AuthScreen, ?view=admin → AdminPanel (solo admin).
+   152→   152→   152→
+   153→   153→   153→---
+   154→   154→   154→Task ID: 3 (landing)
+   155→   155→   155→Agent: frontend-styling-expert
+   156→   156→   156→Task: Landing page pública de AvícolaSaaS (español, tema naranja) — header sticky, hero con preview de producto, features, manual de uso, CTA final y footer. Lista para que el main la monte en `/` para usuarios no autenticados.
+   157→   157→   157→
+   158→   158→   158→Work Log:
+   159→   159→   159→- Leí `worklog.md` (Tasks 1, 2, 3, 4, 5-foundation) para entender el estado: auth listo, API listo, SPA frontend listo, tema NARANJA aplicado en globals.css (primary oklch(0.64 0.18 48)), cuentas demo/admin definidas en `@/lib/accounts`, datos demo que resetean en cada login. Confirmé que NO debía tocar `page.tsx`, `app-shell`, `site-header/footer`, `auth/**`, `admin/**`, `ui/**`, `lib/**`, `globals.css`, `layout.tsx`, `hooks/**`, ni la API.
+   160→   160→   160→- Revisé `theme-toggle.tsx` (botón outline size-icon con `useTheme`, hidratación segura), `accounts.ts` (DEMO_EMAIL/PASSWORD), `button.tsx`/`card.tsx`/`badge.tsx` (variantes), `use-toast.ts` (API de `toast()`), `weighings-tab.tsx` (patrón recharts con `var(--primary)` stroke y estilos CSS vars), `globals.css` (paleta naranja + `tw-animate-css` importado) y `demo-data.ts` (lote demo "Galpón A — Lote 12", 1000 aves, curva de crecimiento 95→1980g). Verifiqué recharts v2.15 y framer-motion disponibles (opté por CSS/tw-animate para animaciones, sin framer-motion para SSR ligero).
+   161→   161→   161→- Creé `src/components/landing/use-demo-login.ts`: hook compartido `useDemoLogin()` que devuelve `{ demoLoading, handleDemo }`. Sigue EXACTAMENTE el patrón del spec: `setDemoLoading(true)` → `signIn("credentials", { email: DEMO_EMAIL, password: DEMO_PASSWORD, redirect: false })` → `setDemoLoading(false)` → si `res?.error` toast destructive ("No se pudo iniciar el demo") → si no `router.refresh()`. Reutilizado por hero y CTA.
+   162→   162→   162→- `landing-header.tsx`: `<header>` sticky top-0 z-40 con `border-b bg-background/80 backdrop-blur`. Marca = cuadrado naranja redondeado (`bg-primary text-primary-foreground`) con icono `Bird` + wordmark "Avícola" (foreground) + "SaaS" (`text-primary`). Derecha: `ThemeToggle` + `Button variant=ghost` "Iniciar sesión" → `router.push("/?auth=1")`. Altura h-16, max-w-7xl, responsive.
+   163→   163→   163→- `landing-hero.tsx`: `section` con fondo sutil (radial gradient naranja opacity 0.08 + gradient lineal from-primary/5). Grid `lg:grid-cols-2 gap-12 items-center`. Columna izquierda: `Badge` naranja tintado ("Gestión avícola integral · Multi-usuario" con `Sparkles`), H1 `text-4xl sm:text-5xl font-bold tracking-tight` con "de principio a fin" en `text-primary`, párrafo muted-foreground text-lg, fila de 2 CTAs (`Button size=lg` "Probar demo" con `Play`/`Loader2 animate-spin` "Entrando…" + `Button size=lg variant=outline` "Crear cuenta gratis" con `ArrowRight`), microcopy con credenciales demo. Columna derecha: Card preview de producto con `shadow-xl rotate-[-1deg] hover:rotate-0 transition`, header "Galpón A — Lote 12" + Badge "Activo", 3 mini KPI tiles (Población 488, Utilidad $3.150.000, Mortalidad 2,4% — COP y coma decimal es-CO), y `AreaChart` de recharts con gradient naranja `var(--primary)` (curva de crecimiento Día 7→42: 95→1980g). Blur decorativo `bg-primary/10` detrás.
+   164→   164→   164→- `landing-features.tsx`: sección con eyebrow `text-primary uppercase` "Funciones", H2 + subtítulo muted. Grid `sm:grid-cols-2 lg:grid-cols-3 gap-5` con 6 Cards: Lotes (Bird), Control de gastos (ReceiptText), Mortalidad diaria (Activity), Pesajes y crecimiento (Scale), Ventas e ingresos (CircleDollarSign), Rentabilidad en tiempo real (Calculator). Cada card: icono en tile `bg-primary/10 text-primary rounded-lg size-10`, título font-semibold, descripción muted-foreground text-sm. Hover: `hover:-translate-y-0.5 hover:shadow-md transition`.
+   165→   165→   165→- `landing-manual.tsx`: sección `border-t bg-muted/30` con eyebrow "Manual de uso", H2 "Cómo empezar en 5 pasos", subtítulo. Lista vertical de 5 Cards (max-w-3xl), cada una con número en círculo naranja (`bg-primary text-primary-foreground rounded-full size-9 font-bold`) + título con icono lucide (UserPlus, Bird, ClipboardList, BarChart3, TrendingUp) + descripción. Debajo, Card "Consejos" (`bg-accent/50 border-primary/20`) con 4 bullets en grid sm:grid-cols-2, cada bullet con punto naranja. Copy en español claro y accionable.
+   166→   166→   166→- `landing-cta.tsx`: banda final `rounded-3xl bg-primary text-primary-foreground` con decoración radial. H2 blanco "Empieza a gestionar tu granja hoy", subtítulo `text-primary-foreground/80`, 2 botones: "Probar demo" (`variant=secondary`, mismo hook con loading) + "Crear cuenta" (`variant=outline` override blanco transparente → `/?auth=1`).
+   167→   167→   167→- `landing-footer.tsx`: `footer border-t` con marca + "AvícolaSaaS © {year}" + microcopy "Hecho para productores de pollos de engorde" + nav de anclas (#funciones, #manual, #empezar). Responsive (flex-col en móvil, row en sm+).
+   168→   168→   168→- `landing-page.tsx`: composición `<div className="flex min-h-screen flex-col bg-background">` → LandingHeader → `<main className="flex-1">` (Hero, Features, Manual, Cta) → LandingFooter. Export nombrado `LandingPage` + default export. `'use client'` por los hooks de navegación/auth.
+   169→   169→   169→- Verificación: `bun run lint` → exit 0 (sin errores ni warnings). `bunx tsc --noEmit` → 0 errores en mis archivos (los errores TS preexistentes en form dialogs/admin API/examples/skills son ajenos a esta tarea y no toqué esos archivos). dev.log muestra servidor en puerto 3000 saludable (200 en `/`), sin tocar page.tsx.
+   170→   170→   170→- Accesibilidad: semántica `header`/`main`/`section`/`footer`, `aria-labelledby` en secciones, `aria-label` en marca y demo button implícito por texto, `aria-hidden` en decoración, focus-visible rings en links, alt implícito por iconos decorativos.
+   171→   171→   171→
+   172→   172→   172→Stage Summary:
+   173→   173→   173→- 8 archivos creados bajo `src/components/landing/`:
+   174→   174→   174→  1. `use-demo-login.ts` (hook compartido)
+   175→   175→   175→  2. `landing-page.tsx` (composición + default export)
+   176→   176→   176→  3. `landing-header.tsx`
+   177→   177→   177→  4. `landing-hero.tsx` (con AreaChart recharts naranja)
+   178→   178→   178→  5. `landing-features.tsx`
+   179→   179→   179→  6. `landing-manual.tsx`
+   180→   180→   180→  7. `landing-cta.tsx`
+   181→   181→   181→  8. `landing-footer.tsx`
+   182→   182→   182→- Integración esperada por el main agent: en `src/app/page.tsx`, cuando `session.status === "unauthenticated"` renderizar `<LandingPage/>` por defecto; si `searchParams.get("auth") === "1"` renderizar `<AuthScreen/>`. El botón "Iniciar sesión"/"Crear cuenta" del landing → `router.push("/?auth=1")`; "Probar demo" → `useDemoLogin().handleDemo()` → `router.refresh()` re-renderiza a app autenticada.
+   183→   183→   183→- Tema NARANJA consistente (`bg-primary`, `text-primary`, `bg-primary/10`, `var(--primary)` en recharts). Cero azul/índigo/verde como primario. UI 100% español, COP (`$3.150.000`), decimal es-CO (`2,4%`). Responsive mobile-first. `bun run lint` limpio.
+   184→   184→   184→
+   185→   185→   185→---
+   186→   186→   186→Task ID: 4
+   187→   187→   187→Agent: fullstack-developer (Admin UI)
+   188→   188→   188→Task: Super-Admin Panel UI — tabla de usuarios con KPIs, diálogo de detalle por usuario y mutaciones PATCH (toggle disabled / set role). Tema naranja, español, COP.
+   189→   189→   189→
+   190→   190→   190→Work Log:
+   191→   191→   191→- Leí `worklog.md` (Tasks 1, 2, 3, 5-foundation) para alinearme al contrato admin API y a las convenciones del frontend (TanStack Query + toast en try/catch + invalidación de `qk.adminUsers` / `qk.adminUser(id)`).
+   192→   192→   192→- Revisé `src/lib/types.ts` (`AdminUserSummary`, `AdminUserDetail`, `AdminBatchWithMetrics`, `UserRole`, `BatchMetrics`, `Batch`), `src/lib/api.ts` (helper sin método PATCH → se usa `fetch` directo), `src/lib/format.ts`, `src/lib/queries.ts` (`qk.adminUsers`, `qk.adminUser(id)`), `src/hooks/use-batches.ts` (patrón de hooks a imitar) y los primitives shadcn disponibles (table, dialog, dropdown-menu, alert-dialog, badge, avatar, card, tooltip).
+   193→   193→   193→- Creé `src/hooks/use-admin.ts`:
+   194→   194→   194→  - `useAdminUsers()` → `useQuery({ queryKey: qk.adminUsers, queryFn: () => api.get<AdminUserSummary[]>("/api/admin/users") })`.
+   195→   195→   195→  - `useAdminUser(id)` → `useQuery({ queryKey: qk.adminUser(id), queryFn: () => api.get<AdminUserDetail>(\`/api/admin/users/${id}\`), enabled: !!id })`.
+   196→   196→   196→  - `patchUser(id, body)` helper interno: `fetch(\`/api/admin/users/${id}\`, { method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body) })` con manejo de errores que reutiliza `ApiError` (401 → "Debes iniciar sesión para continuar", otros → mensaje del body).
+   197→   197→   197→  - `useToggleUserDisabled()` → `useMutation({ mutationFn: ({id,disabled}) => patchUser(id,{disabled}), onSuccess: (data) => { qc.invalidateQueries({queryKey:qk.adminUsers}); qc.invalidateQueries({queryKey:qk.adminUser(data.id)}) } })`.
+   198→   198→   198→  - `useSetUserRole()` → mismo patrón con `{ role }`. Ambos exponen `mutateAsync`.
+   199→   199→   199→- Creé `src/components/admin/admin-users-table.tsx`:
+   200→   200→   200→  - `Card` con `Table` (min-w-[920px]) envuelta en `scroll-thin max-h-[32rem] overflow-y-auto` para scroll vertical; header sticky (`sticky top-0 z-10 bg-card`); scroll horizontal automático por el wrapper de shadcn Table.
+   201→   201→   201→  - Columnas: Usuario (avatar con iniciales en `bg-primary/10 text-primary` + nombre + email + "(tú)"), Rol (Badge default "Admin" con icono Shield / secondary "Usuario"), Estado (Badge outline con `bg-primary/10 text-primary` "Activo" / `bg-destructive/10 text-destructive` "Desactivado"; filas desactivadas con `opacity-60`), Lotes, Pob. actual (`formatNumber`), Gastos (`formatMoney`), Ingresos (`formatMoney`), Utilidad (`formatMoney`, `text-primary` si ≥0 / `text-destructive` si <0), Registrado (`formatDateShort`), Acciones (DropdownMenu kebab).
+   202→   202→   202→  - DropdownMenu: label con email, "Ver detalle" (llama `onViewDetails(id)`), separador, "Activar"/"Desactivar" (variant destructive si va a desactivar) y "Hacer admin"/"Quitar admin" (variant destructive si va a degradar). Deshabilita self-disable (`isSelf && !u.disabled`) y self-demote (`isSelf && u.role === "admin"`) con nota visible debajo del ítem.
+   203→   203→   203→  - `AlertDialog` global para confirmar acciones destructivas (disable / demote) con mensaje contextual y botón `bg-destructive`. Spinner `Loader2` en botones mientras `busyId !== null`.
+   204→   204→   204→  - Toasts en try/catch: éxito "Usuario desactivado" / "Usuario activado" / "Usuario promovido a administrador" / "Rol actualizado a usuario"; error muestra `err.message` (ApiError) en variant destructive.
+   205→   205→   205→- Creé `src/components/admin/admin-user-detail-dialog.tsx`:
+   206→   206→   206→  - `Dialog` large (`sm:max-w-3xl`) con `flex max-h-[90vh] flex-col` y cuerpo scrollable. Props: `{ userId, open, onOpenChange }`.
+   207→   207→   207→  - `useAdminUser(userId)` habilitado solo cuando `open && !!userId`. Skeletons en carga, mensaje + botón Cerrar en error.
+   208→   208→   208→  - Header: avatar grande con iniciales, nombre (DialogTitle), email (DialogDescription), badge de rol (Shield + Admin/Usuario), badge de estado (CheckCircle2/PowerOff), fecha de registro.
+   209→   209→   209→  - KPI grid (5 tiles en `sm:grid-cols-5`): # Lotes, Pob. actual total (Σ currentPopulation), Gastos totales, Ingresos totales, Utilidad total (text-primary/destructive según signo).
+   210→   210→   210→  - Lista de lotes con `divide-y` border: nombre + status badge + "Día {daysOld}" + fecha inicio + Ingresados + Pob. actual + Mortalidad % + Utilidad (con color). Empty state "Este usuario aún no tiene lotes." si no hay batches.
+   211→   211→   211→- Creé `src/components/admin/admin-panel.tsx` (export nombrado + default):
+   212→   212→   212→  - Layout `mx-auto w-full max-w-7xl px-4 sm:px-6 py-8`.
+   213→   213→   213→  - Back button (`ArrowLeft` → `router.push("/")`), H1 "Panel de Administración", subtítulo "Gestiona los usuarios de la plataforma.".
+   214→   214→   214→  - KPIs agregados (4 tiles en `sm:grid-cols-4`): Usuarios totales, Activos, Desactivados (tone destructive), Lotes totales (Σ batchCount).
+   215→   215→   215→  - `useSession()` para obtener `currentUserId` (vía cast seguro `(session?.user as {id?: string})?.id` ya que next-auth no declara `id` en el tipo por defecto). Se pasa a `AdminUsersTable` para bloquear self-disable/self-demote en la UI.
+   216→   216→   216→  - Estado del diálogo: `selectedUserId` + `detailOpen` se levantan aquí (patrón "lift state up") y se pasan a `<AdminUserDetailDialog>`. La tabla solo llama `onViewDetails(id)`.
+   217→   217→   217→  - Estados: skeletons en loading (6 filas), Card con texto destructive + Reintentar en error.
+   218→   218→   218→- Verificaciones:
+   219→   219→   219→  - `bun run lint` → exit 0, sin warnings ni errores en mis archivos.
+   220→   220→   220→  - `bunx tsc --noEmit` → sin errores en `src/components/admin/**` ni `src/hooks/use-admin.ts` (los errores que aparecen en otros archivos — form resolvers, admin API route — son preexistentes de Tasks 2/3 y están fuera de mi scope).
+   221→   221→   221→  - `dev.log` sin errores de compilación; `GET /api/admin/users` responde 401 cuando no hay sesión (comportamiento esperado del guard).
+   222→   222→   222→- No toqué: `src/app/page.tsx`, `src/components/app-shell.tsx`, `src/components/site-header.tsx`, `src/components/landing/**`, `src/components/auth/**`, `src/components/ui/**`, `src/lib/**`, `prisma/**`, `src/app/api/**`, `src/app/globals.css`, `src/app/layout.tsx`, `src/hooks/use-batches.ts`.
+   223→   223→   223→
+   224→   224→   224→Stage Summary:
+   225→   225→   225→- 4 archivos creados:
+   226→   226→   226→  1. `src/hooks/use-admin.ts` — hooks TanStack Query (useAdminUsers, useAdminUser, useToggleUserDisabled, useSetUserRole) + helper `patchUser` con fetch PATCH directo.
+   227→   227→   227→  2. `src/components/admin/admin-users-table.tsx` — tabla responsive con 10 columnas, dropdown de acciones, confirmación AlertDialog para acciones destructivas, bloqueo de self-disable/self-demote.
+   228→   228→   228→  3. `src/components/admin/admin-user-detail-dialog.tsx` — diálogo large con header + KPIs agregados + lista de lotes con métricas.
+   229→   229→   229→  4. `src/components/admin/admin-panel.tsx` — componente principal (named + default export), KPIs agregados, orquesta tabla + diálogo.
+   230→   230→   230→- `bun run lint` pasa limpio (exit 0). `tsc --noEmit` sin errores en mis archivos.
+   231→   231→   231→- Convenciones respetadas: TanStack Query con `mutateAsync` + toasts en try/catch (igual que `use-batches.ts`); moneda COP 0 decimales; fechas es-CO; tema naranja vía `bg-primary`/`text-primary` (sin indigo/azul/verde como primario); status badges con `bg-primary/10 text-primary` (activo) y `bg-destructive/10 text-destructive` (desactivado); responsive mobile-first (tabla con scroll horizontal, KPIs apilables); accesibilidad (aria-labels en iconos, semántica, sr-only live region para carga).
+   232→   232→   232→- Listo para que el `app-shell.tsx` enrute a `<AdminPanel/>` cuando `?view=admin` (y el usuario sea admin) — pendiente en el agente main.
+   233→   233→   233→
+   234→   234→   234→
+   235→   235→   235→---
+   236→   236→   236→Task ID: 5-integration
+   237→   237→   237→Agent: main (arquitecto) — integración y verificación fase 2
+   238→   238→   238→Task: Integrar landing + admin panel, enrutar vistas, botón demo, verificar end-to-end.
+   239→   239→   239→
+   240→   240→   240→Work Log:
+   241→   241→   241→- Subagents (Task 3 landing, Task 4 admin UI) completaron con lint limpio.
+   242→   242→   242→- AuthScreen: añadido botón "Probar como demo" (con divider "o") + microcopy con credenciales demo + botón "Volver al inicio".
+   243→   243→   243→- page.tsx: no-auth → LandingPage por defecto, AuthScreen si ?auth=1 (useSearchParams en Suspense).
+   244→   244→   244→- app-shell.tsx: ?view=admin → AdminPanel (solo role admin; si no es admin redirige a /). ?batch=ID → detalle. Sin param → dashboard.
+   245→   245→   245→- site-header.tsx: botón "Admin" (ShieldCheck) visible solo para admins; marca clickeable → dashboard.
+   246→   246→   246→- BUG encontrado y corregido: NextAuth v4 no transporta campos extra del objeto devuelto por authorize al callback jwt → role llegaba "user". Solución: lookup del rol en BD dentro del callback jwt (patrón estándar v4).
+   247→   247→   247→- BUG encontrado y corregido: el cliente Prisma en memoria del dev server estaba cacheado (sin role/disabled) tras db:push → error 500 en login. Solución: reiniciado el dev server para recargar el cliente.
+   248→   248→   248→- Verificación Agent Browser end-to-end:
+   249→   249→   249→  - Landing (hero, features, manual 5 pasos, CTA, footer) en naranja. Color primary verificado lab(57 47.7 70.3) = naranja.
+   250→   250→   250→  - Demo login desde landing → dashboard con 2 lotes sembrados + KPIs correctos (pob 626, mortalidad 2,4%, 6 pesajes).
+   251→   251→   251→  - Login admin (admin@avicola.test) → botón Admin en header → panel admin: 4 KPIs + tabla 4 usuarios con stats.
+   252→   252→   252→  - Detalle de usuario (María): dialog con info + KPIs + lista de lotes.
+   253→   253→   253→  - Desactivar María (confirm dialog) → estado "Desactivado" → María NO puede loguearse (bloqueada).
+   254→   254→   254→  - Reactivar María → estado "Activo".
+   255→   255→   255→  - Protección anti-lockout: auto-desactivar y auto-degradar deshabilitados en el menú del propio admin.
+   256→   256→   256→  - Footer sticky en móvil (bottom=844=vh). Responsive móvil y desktop.
+   257→   257→   257→- `bun run lint` → exit 0. dev.log sin errores tras los fixes.
+   258→   258→   258→
+   259→   259→   259→Stage Summary:
+   260→   260→   260→- Panel super-admin operativo: ver todos los usuarios, ver detalles, activar/desactivar, cambiar rol (con protecciones).
+   261→   261→   261→- Paleta naranja aplicada en toda la web.
+   262→   262→   262→- Usuario demo (demo@avicola.test/demo123456) con datos sembrados que se reinician en cada login; botón demo en landing y en auth.
+   263→   263→   263→- Landing page con manual de uso de 5 pasos.
+   264→   264→   264→- Credenciales: admin@avicola.test/admin123456 · demo@avicola.test/demo123456.
+   265→   265→   265→
+   266→   266→   266→---
+   267→   267→   267→Task ID: 6
+   268→   268→   268→Agent: main (arquitecto) — venta por kilo
+   269→   269→   269→Task: Añadir modo de venta por kilo además de por unidad (pollo).
+   270→   270→   270→
+   271→   271→   271→Work Log:
+   272→   272→   272→- Schema: añadidos `unit String @default("unit")` ("unit"|"kilo") y `weight Float?` (kg totales) a Sale. db:push + Prisma Client regenerado.
+   273→   273→   273→- Tipos (types.ts): SaleUnit type; Sale ahora tiene unit/weight; SaleInput acepta unit/weight.
+   274→   274→   274→- Helper centralizado (src/lib/sale.ts): saleIncome(sale) → kilo: weight×unitPrice; unit: count×unitPrice. Usado por backend (metrics, admin) y frontend (tabla, preview).
+   275→   275→   275→- Backend:
+   276→   276→   276→  - metrics.ts: totalIncome usa la fórmula según unit.
+   277→   277→   277→  - API POST /api/batches/[id]/sales: valida unit (enum) + weight (>0 si kilo).
+   278→   278→   278→  - API PUT /api/sales/[id]: acepta unit/weight; limpia weight si cambia a unit.
+   279→   279→   279→  - API admin users: select incluye unit/weight; totalIncome usa la nueva fórmula.
+   280→   280→   280→- Seed demo: Lote 1 ahora tiene 1 venta por kilo (150 aves, 300 kg, $8.500/kg = $2.550.000) + 1 por unidad (200 × $11.500).
+   281→   281→   281→- Frontend:
+   282→   282→   282→  - sale-form-dialog: ToggleGroup "Por unidad (pollo)" | "Por kilo"; campos condicionales (Peso total kg + Precio por kilo solo en kilo); preview del ingreso en tiempo real; carga correcta en edición según modo.
+   283→   283→   283→  - sales-tab: columnas Aves, Modo (badge Kilo/Unidad), Detalle (kg o —), Precio (con sufijo "por kg"/"por ave"), Ingreso (saleIncome).
+   284→   284→   284→- BUG corregido: form.watch devuelve strings (pre-zod-coerce); preview usaba typeof===number → $0. Fix: helper toNum() parsea strings.
+   285→   285→   285→- Dev server reiniciado (cliente Prisma cacheado tras db:push).
+   286→   286→   286→- Verificación Agent Browser: demo login → lote con venta kilo sembrada → tabla muestra ambos modos → crear venta kilo (80 aves, 160kg, $9.000 → $1.440.000) → KPIs actualizados → editar venta unit (carga modo unidad) → editar venta kilo (carga modo kilo + peso) → admin panel ingresos agregados correctos ($15.511.400).
+   287→   287→   287→- `bun run lint` → exit 0. dev.log sin errores.
+   288→   288→   288→
+   289→   289→   289→Stage Summary:
+   290→   290→   290→- Las ventas ahora pueden ser por unidad (pollo) o por kilo (peso total × precio/kg).
+   291→   291→   291→- El ingreso se calcula automáticamente según el modo y se propaga a KPIs del lote, admin panel y utilidad.
+   292→   292→   292→- El demo incluye una venta por kilo de ejemplo.
+   293→   293→   293→
+   294→   294→   294→---
+   295→   295→   295→Task ID: 7
+   296→   296→   296→Agent: main (arquitecto) — fix visibilidad panel admin
+   297→   297→   297→Task: El login como admin mostraba el dashboard sin forma evidente de acceder al panel de super-admin.
+   298→   298→   298→
+   299→   299→   299→Work Log:
+   300→   300→   300→- Diagnóstico: la sesión SÍ llevaba role="admin" correctamente. El problema era de UX: el botón "Admin" del header usaba `hidden sm:inline` → en móvil solo mostraba un ícono sin aria-label, indetectable. Además el admin aterriza en el Dashboard (comportamiento correcto) pero no había ningún aviso que le indicara que tiene acceso admin.
+   301→   301→   301→- Fix 1 (site-header.tsx): botón Admin ahora siempre muestra texto "Admin", con estilo destacado (bg-primary/10, border-primary/30, font-semibold), aria-label="Panel de administración".
+   302→   302→   302→- Fix 2 (site-header.tsx): menú de usuario ahora incluye badge "Administrador" junto al nombre, entrada "Mis lotes" y entrada "Panel de administración" (además de "Cerrar sesión").
+   303→   303→   303→- Fix 3 (dashboard.tsx): aviso destacado en la parte superior del dashboard para admins — borde primary, icono ShieldCheck, texto "Tienes acceso de administrador" + botón "Ir al Panel de Administración". Visible en móvil y escritorio.
+   304→   304→   304→- Verificación Agent Browser (viewport 390 y 1440): login admin → banner visible → clic → panel admin carga con tabla de usuarios (incluye "Administrador(tú)"). Sin errores.
+   305→   305→   305→- `bun run lint` → exit 0. dev.log limpio.
+   306→   306→   306→
+   307→   307→   307→Stage Summary:
+   308→   308→   308→- El panel de super-admin ahora es accesible de 3 formas evidentes: botón destacado en header, entrada en menú de usuario, y aviso con botón en el dashboard.
+   309→   309→   309→- Credenciales admin: admin@avicola.test / admin123456.
+   310→   310→   310→
+   311→   311→   311→---
+   312→   312→   312→Task ID: 8
+   313→   313→   313→Agent: main (arquitecto) — cursor pointer global
+   314→   314→   314→Task: Aplicar cursor pointer en TODOS los botones y opciones interactivas.
+   315→   315→   315→
+   316→   316→   316→Work Log:
+   317→   317→   317→- Diagnóstico: la mayoría de componentes usan <Button> (cubiertos por regla simple), pero algunos componentes shadcn/Radix (DropdownMenuItem, etc.) traen `cursor-default` hardcodeado en su className, y las reglas en @layer base pierden prioridad contra las utilities de Tailwind v4.
+   318→   318→   318→- Solución: reglas CSS globales FUERA de @layer (mayor prioridad que utilities) con !important, cubriendo:
+   319→   319→   319→  - button, [role=button], a, summary, label[for]
+   320→   320→   320→  - [role=menuitem], [role=menuitemradio], [role=menuitemcheckbox], [role=tab], [role=option], [role=combobox]
+   321→   321→   321→  - data-slot de todos los triggers Radix: dropdown-menu-item, select-trigger, toggle-group-item, tabs-trigger, accordion-trigger, collapsible-trigger, tooltip-trigger, popover-trigger, dialog-trigger, alert-dialog-trigger, hover-card-trigger, context-menu-trigger, menubar-trigger/item, navigation-menu-trigger/link
+   322→   322→   322→  - data-radix-collection-item (fallback para items de colección Radix)
+   323→   323→   323→- Estados deshabilitados → cursor: not-allowed (disabled, aria-disabled, data-disabled).
+   324→   324→   324→- Inputs de texto/fecha/número/textarea → cursor: text (no pointer).
+   325→   325→   325→- Checkbox/Radio nativos → cursor: pointer.
+   326→   326→   326→- Verificación Agent Browser (computed style): button=pointer, batchCard(role=button)=pointer, themeToggle=pointer, userMenu=pointer, dropdownMenuItems=pointer (x2), tabs=pointer (x4), editIcon/deleteIcon=pointer, select-trigger=pointer, toggle-group-item=pointer, numberInput=text, admin kebabs=pointer, landing links=pointer (x4), demo button=pointer.
+   327→   327→   327→- `bun run lint` → exit 0. Sin errores de página ni dev.log.
+   328→   328→   328→
+   329→   329→   329→Stage Summary:
+   330→   330→   330→- Cursor pointer aplicado de forma consistente en TODA la app: botones, enlaces, tabs, selects, toggles, dropdown items, tarjetas clickeables, icon buttons, menús Radix.
+   331→   331→   331→- Inputs de texto mantienen cursor-text; elementos deshabilitados muestran not-allowed.
+   332→   332→   332→- Sin tocar componentes ui de shadcn (cambio puramente en globals.css).
+   333→   333→   333→

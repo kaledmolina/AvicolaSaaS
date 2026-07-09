@@ -330,3 +330,70 @@ Stage Summary:
 - Cursor pointer aplicado de forma consistente en TODA la app: botones, enlaces, tabs, selects, toggles, dropdown items, tarjetas clickeables, icon buttons, menús Radix.
 - Inputs de texto mantienen cursor-text; elementos deshabilitados muestran not-allowed.
 - Sin tocar componentes ui de shadcn (cambio puramente en globals.css).
+
+---
+Task ID: 9
+Agent: fullstack-developer (Backup UI)
+Task: Crear la UI de Copia de Seguridad / Restauración para el panel de super-admin. Español, tema naranja. Descarga binaria + restauración con confirmación destructiva + aviso de recarga tras restore.
+
+Work Log:
+- Leí worklog.md (Task IDs 1–8: foundation, API, admin panel, security/cursor). Confirmé que el backend de backup YA existe: `src/app/api/admin/backup/route.ts` (GET → binary .db download con Content-Disposition) y `src/app/api/admin/backup/restore/route.ts` (POST multipart → valida admin + rate-limit 1/2min + magic-header SQLite + cierra Prisma + sobrescribe .db + pide reload).
+- Creé `src/hooks/use-backup.ts`:
+  - `useDownloadBackup()`: `useMutation` que hace `fetch("/api/admin/backup")`, lee el body como `Blob`, parsea `Content-Disposition` para el filename, crea `URL.createObjectURL` + `<a download>` temporal + `click()` (sin navegar la página), revoca el URL tras 1.5s (compatibilidad Safari). Errores: parse JSON del body → `ApiError` con mensajes en español; 401→"Debes iniciar sesión…"; captura errores de red (servidor caído tras restore) con mensaje que sugiere recargar.
+  - `useRestoreBackup()`: `useMutation` que toma un `File`, construye `FormData` con campo `file`, POST a `/api/admin/backup/restore` (sin Content-Type — el navegador define el boundary multipart). En éxito invalida `qk.adminUsers`. Helper `readApiError()` reutilizable para ambos endpoints.
+  - Tipos exportados: `DownloadBackupResult`, `RestoreBackupResult` coinciden con el contrato API.
+- Creé `src/components/admin/backup-section.tsx`:
+  - Card "Copia de Seguridad" con icon-tile naranja (`bg-primary/10 text-primary`) + `DatabaseBackup`.
+  - **Parte 1 — Descargar**: icon-tile naranja (`HardDriveDownload`), descripción exacta del contrato + hint de tamaño, Button "Descargar copia de seguridad" (icon `Download`) con `Loader2` spinner mientras `isPending`. Texto cambia a "Descargando…".
+  - **Parte 2 — Restaurar**: icon-tile destructive (`bg-destructive/10 text-destructive`, icon `Upload`), descripción con `⚠️` warning + `strong` "REEMPLAZA todos los datos actuales". Input file oculto (`sr-only`, `accept=".db,application/octet-stream"`) disparado por Button outline "Seleccionar archivo .db". Muestra el nombre + tamaño (`formatBytes`) del archivo seleccionado en una pill con botón de quitar. Button destructive "Restaurar base de datos" deshabilitado hasta que haya archivo, con spinner "Restaurando…".
+  - **Confirmación**: `AlertDialog` "¿Restaurar base de datos?" con `TriangleAlert` destructive, warning strong "Se reemplazarán TODOS los datos… no se puede deshacer", muestra el archivo seleccionado. Usé `<Button variant="destructive">` normal (NO `AlertDialogAction`) para mantener el diálogo abierto durante la petición y mostrar spinner en el botón "Sí, restaurar". Cancelar cierra sin acción.
+  - **Éxito**: `Alert` con borde `primary/40` + bg `primary/5`, icono `RefreshCw` naranja, título "Restauración completada" (color primary), mensaje del API + explicación clara de que la conexión Prisma se cerró y DEBE recargar, botón prominente "Recargar página" (`window.location.reload()`). `role="status" aria-live="polite"`.
+  - **Errores**: toast `variant="destructive"` con el `error` del API (ej. "El archivo no es una base de datos SQLite válida", "Espera unos minutos antes de restaurar nuevamente" para 429).
+  - Separador `<Separator/>` entre las dos partes. Layout responsive (`flex-col sm:flex-row`, `w-full sm:w-auto`).
+- Edité `src/components/admin/admin-panel.tsx`: importé `BackupSection` y lo renderizo justo DESPUÉS de la sección de tabla de usuarios (`</div>` de `mt-6`) y ANTES del `AdminUserDetailDialog`. La Card ya incluye `mt-8` para separación visual.
+- Calidad: `bun run lint` → exit 0 (sin warnings ni errores). Dev server recompiló limpio (`✓ Compiled in 194ms`), `GET / 200` en 487ms.
+- Accesibilidad: `aria-label` en botones de icono y en input file oculto, `aria-labelledby` en secciones, `role="status"` + `aria-live="polite"` en alert de éxito, `sr-only` para el botón "Quitar archivo", focus-visible heredado de shadcn.
+
+Stage Summary:
+- UI de backup/restore lista y conectada al API existente. Cumple contrato exacto (GET binario con Content-Disposition; POST multipart con campo `file` → `{success, message, size}`).
+- `useDownloadBackup()` descarga sin navegar la página (blob + object URL + `<a download>`), con manejo robusto de errores JSON y de red.
+- `useRestoreBackup()` usa FormData multipart correcto, invalida `qk.adminUsers` al éxito.
+- Confirmación destructiva con AlertDialog, spinner durante la petición, Alert de éxito MUY visible con botón "Recargar página" (porque el restore cierra la conexión Prisma y exige reload).
+- Tema naranja respetado (sin blue/indigo/green). Destructive solo para restaurar (acción que reemplaza datos). Español en todos los textos.
+- Archivos creados: `src/hooks/use-backup.ts`, `src/components/admin/backup-section.tsx`. Archivo editado: `src/components/admin/admin-panel.tsx` (+1 import, +3 líneas JSX).
+
+---
+Task ID: 10
+Agent: main (arquitecto) — seguridad + backup/restore
+Task: Mejorar seguridad (auth, middleware, headers, rate limit, contraseñas) y sistema de backup/restore de BD.
+
+Work Log:
+SEGURIDAD:
+- Rate limiter en memoria (src/lib/rate-limit.ts): rateLimit(key, max, window) + getClientIp. Login: 10/15min por IP. Registro: 5/hora por IP.
+- auth.ts: rate limit en authorize, JWT maxAge 12h + updateAge 1h, re-check disabled en callback jwt (token.disabled), propagación a session.
+- session.ts: getCurrentUser() devuelve null si token.disabled (cuenta desactivada en caliente cierra la sesión).
+- middleware.ts (Next 16): getToken + 401 JSON para /api/* excepto auth/register. Verificado: /api/batches → 401 {"error":"No autenticado"}.
+- next.config.ts: headers de seguridad (X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy, Permissions-Policy, HSTS).
+- register route: validación de contraseña robusta (min 8, letra + número), rate limit de registro. AuthScreen actualizado con nueva política.
+- BUG corregido: authorize recibía req de NextAuth (no Request estándar) → getClientIp fallaba con "h.get is not a function". Fix: leer headers como Record directamente.
+- BUG corregido: middleware con `export { default } from "next-auth/middleware"` no funcionaba en Next 16 → reescrito con getToken explícito + NextResponse 401.
+
+BACKUP/RESTORE:
+- API GET /api/admin/backup: lee el archivo .db (SQLite) y lo devuelve como descarga con Content-Disposition + timestamp. Solo admin.
+- API POST /api/admin/backup/restore: recibe multipart/form-data con file .db, valida magic header "SQLite format 3", límite 50MB, rate limit 1/2min, cierra Prisma, sobrescribe el archivo. Solo admin.
+- BUG corregido: import `next/response` no existe en Next 16 → cambiado a `next/server`.
+- UI (subagent Task 9): BackupSection en admin panel (descargar con blob download, restaurar con file input + AlertDialog de confirmación + Alert de éxito con botón "Recargar página").
+
+VERIFICACIÓN Agent Browser:
+- Login admin funciona tras fixes.
+- Middleware: /api/batches y /api/admin/users → 401 JSON sin sesión; /api/register público.
+- Headers de seguridad: los 5 presentes (X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, HSTS).
+- Backup download: genera archivo SQLite válido (86KB, "SQLite format 3").
+- Restore: sube .db → confirmación → éxito → Alert "Recargar página" → reload → sesión admin persiste (datos restaurados del backup).
+- Validación: archivo no-SQLite rechazado por el backend.
+- `bun run lint` → exit 0. dev.log sin errores.
+
+Stage Summary:
+- Seguridad reforzada: middleware 401 JSON, rate limiting (login + registro), JWT expira, re-check disabled, contraseñas robustas, headers de seguridad.
+- Backup/restore operativo en panel admin: descargar .db, restaurar .db con validación y confirmación.
+- Credenciales: admin@avicola.test / admin123456.
