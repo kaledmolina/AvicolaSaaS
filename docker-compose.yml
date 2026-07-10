@@ -15,7 +15,7 @@ services:
       - DATABASE_URL=file:/app/db/custom.db
       # NEXTAUTH_URL debe ser la URL pública donde se desplegará el sistema. 
       # Si accedes por IP, debe ser http://TU_IP:3000
-      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_URL=https://avicolasas.online
       - NEXTAUTH_SECRET=avicola-saas-secret-key-change-in-production-9f3k2j5h8
     volumes:
       - avicola-db:/app/db
