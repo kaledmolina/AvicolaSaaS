@@ -23,6 +23,14 @@ export const metadata: Metadata = {
   icons: {
     icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
   },
+  openGraph: {
+    title: "AvícolaSaaS — Gestión Integral de Granjas",
+    description: "Plataforma multi-usuario para el control de crianza, finanzas y rendimiento de pollos de engorde.",
+    url: "https://xn--avcolasas-h5a.online",
+    siteName: "AvícolaSaaS",
+    locale: "es_CO",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
