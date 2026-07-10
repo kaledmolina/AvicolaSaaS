@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  avicola-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: avicola-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      # La URL de la BD persistirá en el volumen mapeado abajo
+      - DATABASE_URL=file:/app/db/custom.db
+      # NEXTAUTH_URL debe ser la URL pública donde se desplegará el sistema. 
+      # Si accedes por IP, debe ser http://TU_IP:3000
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_SECRET=avicola-saas-secret-key-change-in-production-9f3k2j5h8
+    volumes:
+      - avicola-db:/app/db
+
+volumes:
+  avicola-db:
+    name: avicola-sqlite-data
