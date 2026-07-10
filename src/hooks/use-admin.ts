@@ -109,3 +109,13 @@ export function useSetUserRole() {
     },
   })
 }
+
+export function useDeleteUser() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/api/admin/users/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.adminUsers })
+    },
+  })
+}

@@ -18,6 +18,7 @@ import {
   Eye,
   Power,
   PowerOff,
+  Trash2,
 } from "lucide-react"
 
 import { ApiError } from "@/lib/api"
@@ -30,6 +31,7 @@ import type { AdminUserSummary, UserRole } from "@/lib/types"
 import {
   useSetUserRole,
   useToggleUserDisabled,
+  useDeleteUser,
 } from "@/hooks/use-admin"
 import { useToast } from "@/hooks/use-toast"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -75,6 +77,7 @@ export interface AdminUsersTableProps {
 type PendingAction =
   | { type: "disable"; user: AdminUserSummary }
   | { type: "demote"; user: AdminUserSummary }
+  | { type: "delete"; user: AdminUserSummary }
   | null
 
 export function AdminUsersTable({
@@ -85,6 +88,7 @@ export function AdminUsersTable({
   const { toast } = useToast()
   const toggleDisabled = useToggleUserDisabled()
   const setRole = useSetUserRole()
+  const deleteUser = useDeleteUser()
   const [pending, setPending] = React.useState<PendingAction>(null)
   const [busyId, setBusyId] = React.useState<string | null>(null)
 
@@ -132,6 +136,26 @@ export function AdminUsersTable({
     }
   }
 
+  async function handleDeleteUser(user: AdminUserSummary) {
+    setBusyId(user.id)
+    try {
+      await deleteUser.mutateAsync(user.id)
+      toast({
+        title: "Usuario eliminado",
+        description: "El usuario y todos sus datos han sido borrados de forma permanente.",
+      })
+    } catch (err) {
+      toast({
+        title: "Error al eliminar",
+        description: err instanceof ApiError ? err.message : "No se pudo eliminar el usuario.",
+        variant: "destructive",
+      })
+    } finally {
+      setBusyId(null)
+      setPending(null)
+    }
+  }
+
   return (
     <Card className="py-0">
       <CardContent className="px-0 py-0">
@@ -161,9 +185,11 @@ export function AdminUsersTable({
               ) : (
                 users.map((u) => {
                   const isSelf = u.id === currentUserId
+                  const isDemo = u.email === "demo@avicolasaas.com"
                   const isBusy = busyId === u.id
                   const disableSelfHint = isSelf && !u.disabled
                   const demoteSelfHint = isSelf && u.role === "admin"
+                  const cannotDeleteHint = isSelf ? "No puedes eliminar tu propia cuenta" : isDemo ? "No puedes eliminar la cuenta Demo" : undefined
                   return (
                     <TableRow
                       key={u.id}
@@ -338,6 +364,16 @@ export function AdminUsersTable({
                                   </>
                                 )}
                               </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onSelect={() => setPending({ type: "delete", user: u })}
+                                disabled={!!cannotDeleteHint}
+                                variant="destructive"
+                                title={cannotDeleteHint}
+                              >
+                                <Trash2 className="size-4 text-destructive" />
+                                <span className="text-destructive font-medium">Eliminar</span>
+                              </DropdownMenuItem>
                               {demoteSelfHint && (
                                 <p className="px-2 pb-1 pt-0.5 text-[11px] text-muted-foreground">
                                   No puedes quitarte tus propios permisos.
@@ -371,7 +407,9 @@ export function AdminUsersTable({
             <AlertDialogTitle>
               {pending?.type === "disable"
                 ? "¿Desactivar usuario?"
-                : "¿Quitar permisos de admin?"}
+                : pending?.type === "demote"
+                  ? "¿Quitar permisos de admin?"
+                  : "¿Eliminar usuario permanentemente?"}
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <span>
@@ -380,11 +418,17 @@ export function AdminUsersTable({
                     Vas a desactivar a <strong>{pending?.user.name}</strong> ({pending?.user.email}).
                     Este usuario no podrá iniciar sesión hasta que lo reactives.
                   </>
-                ) : (
+                ) : pending?.type === "demote" ? (
                   <>
                     Vas a quitar los permisos de administrador a{" "}
                     <strong>{pending?.user.name}</strong> ({pending?.user.email}). Solo podrá
                     gestionar sus propios lotes.
+                  </>
+                ) : (
+                  <>
+                    Vas a eliminar a <strong>{pending?.user.name}</strong> ({pending?.user.email}).
+                    <br /><br />
+                    <strong className="text-destructive">¡Advertencia!</strong> Esta acción es irreversible. Se borrarán todos los lotes, gastos, registros de mortalidad y ventas asociados a este usuario permanentemente.
                   </>
                 )}
               </span>
@@ -399,13 +443,19 @@ export function AdminUsersTable({
                 if (!pending) return
                 if (pending.type === "disable") {
                   void handleToggleDisabled(pending.user)
-                } else {
+                } else if (pending.type === "demote") {
                   void handleSetRole(pending.user, "user")
+                } else if (pending.type === "delete") {
+                  void handleDeleteUser(pending.user)
                 }
               }}
             >
               {busyId !== null && <Loader2 className="size-4 animate-spin" />}
-              {pending?.type === "disable" ? "Desactivar" : "Quitar admin"}
+              {pending?.type === "disable"
+                ? "Confirmar desactivación"
+                : pending?.type === "demote"
+                  ? "Confirmar cambio"
+                  : "Eliminar usuario"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

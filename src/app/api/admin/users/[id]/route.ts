@@ -44,6 +44,7 @@ export async function GET(
   const batches = user.batches.map((b) => ({
     batch: {
       ...b,
+      status: b.status as "active" | "closed",
       startDate: b.startDate.toISOString(),
       createdAt: b.createdAt.toISOString(),
       updatedAt: b.updatedAt.toISOString(),
@@ -168,4 +169,41 @@ export async function PATCH(
   }
 
   return NextResponse.json(updated)
+}
+
+// DELETE /api/admin/users/[id] → eliminar un usuario de forma permanente (cascada)
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const guard = await requireAdmin()
+  if ("response" in guard) return guard.response
+  const admin = guard.user
+
+  const { id } = await params
+
+  const target = await db.user.findUnique({ where: { id } })
+  if (!target) {
+    return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 })
+  }
+
+  // Protección: No se puede eliminar a sí mismo
+  if (id === admin.id) {
+    return NextResponse.json(
+      { error: "No puedes eliminar tu propia cuenta de administrador" },
+      { status: 400 }
+    )
+  }
+
+  // Protección: No se puede eliminar la cuenta DEMO
+  if (target.email === DEMO_EMAIL) {
+    return NextResponse.json(
+      { error: "La cuenta de demostración no puede ser eliminada" },
+      { status: 400 }
+    )
+  }
+
+  await db.user.delete({ where: { id } })
+
+  return new NextResponse(null, { status: 204 })
 }
