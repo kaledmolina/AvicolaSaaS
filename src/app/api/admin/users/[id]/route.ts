@@ -76,14 +76,8 @@ export async function GET(
     metrics: computeMetrics(
       {
         id: b.id,
-        userId: b.userId,
-        name: b.name,
         initialCount: b.initialCount,
         startDate: b.startDate,
-        status: b.status as "active" | "closed",
-        notes: b.notes,
-        createdAt: b.createdAt,
-        updatedAt: b.updatedAt,
       },
       b.expenses,
       b.mortality,
