@@ -11,6 +11,9 @@ const LOGIN_MAX = 10
 const LOGIN_WINDOW = 15 * 60 * 1000 // 15 min
 
 export const authOptions: NextAuthOptions = {
+  // Secret explícito para garantizar que todos los handlers y el middleware
+  // usen el mismo en entornos Turbopack donde process.env puede variar.
+  secret: process.env.NEXTAUTH_SECRET,
   session: {
     strategy: "jwt",
     // JWT de corta duración: 12h. El usuario debe reautenticarse tras expirar.

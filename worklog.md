@@ -397,3 +397,32 @@ Stage Summary:
 - Seguridad reforzada: middleware 401 JSON, rate limiting (login + registro), JWT expira, re-check disabled, contraseñas robustas, headers de seguridad.
 - Backup/restore operativo en panel admin: descargar .db, restaurar .db con validación y confirmación.
 - Credenciales: admin@avicola.test / admin123456.
+
+---
+Task ID: 11
+Agent: main (arquitecto) — validación cierre de sesión + fix crítico
+Task: Validar el flujo de logout; se encontró y corrigió un bug crítico de auth.
+
+Work Log:
+- Al validar el cierre de sesión se detectó que las rutas /api/* devolvían 401 incluso CON sesión activa.
+- Diagnóstico: el dev.log mostraba `[next-auth][warn][NO_SECRET]` y `JWEDecryptionFailed`.
+- CAUSA RAÍZ: el archivo `.env` había perdido las variables `NEXTAUTH_SECRET` y `NEXTAUTH_URL` (solo quedaba `DATABASE_URL`). Sin secret, getServerSession no podía desencriptar el JWT → todos los getCurrentUser() devolvían null → 401.
+- Se restauró `.env` con NEXTAUTH_SECRET y NEXTAUTH_URL.
+- Se añadió `secret: process.env.NEXTAUTH_SECRET` explícito en authOptions (defensa adicional para Turbopack).
+- El middleware se simplificó a verificación de cookie (next-auth.session-token), ya que getToken de next-auth/jwt no funciona bien en Next 16 Turbopack. La validación criptográfica real la hace getServerSession en cada handler.
+- Se reinició el dev server limpio (rm -rf .next) para descartar caché corrupta.
+
+VERIFICACIÓN Agent Browser (flujo completo de sesión):
+1. Sin sesión: /api/batches → 401, /api/admin/users → 401 ✓
+2. Login admin: POST /api/auth/callback/credentials → sesión activa ✓
+3. Con sesión: /api/batches → 200 OK, /api/admin/users → 200 OK ✓
+4. Logout (menú → "Cerrar sesión"): POST /api/auth/signout → 200 ✓
+5. Tras logout: /api/auth/session → "NO SESSION" ✓
+6. Tras logout: /api/batches → 401 BLOCKED, /api/admin/users → 401 BLOCKED ✓
+7. Cookie next-auth.session-token eliminada (solo quedan csrf + callback-url inofensivas) ✓
+8. Tras logout, ?view=admin y ?batch=<id> muestran landing (no panel) ✓
+- `bun run lint` → exit 0. dev.log sin errores nuevos.
+
+Stage Summary:
+- Cierre de sesión validado end-to-end: la cookie se elimina, la sesión se invalida, las rutas protegidas bloquean el acceso, las vistas protegidas redirigen a landing.
+- Bug crítico corregido: .env restaurado con NEXTAUTH_SECRET. Sin este fix, NINGUNA ruta autenticada funcionaba.

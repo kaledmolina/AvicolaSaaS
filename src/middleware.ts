@@ -1,15 +1,21 @@
 import { NextResponse } from "next/server"
-import { getToken } from "next-auth/jwt"
 import type { NextRequest } from "next/server"
 
 // Protege todas las rutas /api/* (excepto auth y registro público).
-// Para APIs respondemos 401 JSON (sin redirección), que es lo que espera
-// el frontend (TanStack Query / fetch). La página "/" queda pública.
+// Verificamos la presencia de la cookie de sesión de NextAuth. La validación
+// criptográfica completa del JWT la realiza cada handler con
+// getCurrentUser() / getServerSession(authOptions), que es la fuente de
+// verdad. El middleware es una primera línea de defensa.
 
-export async function middleware(req: NextRequest) {
-  const token = await getToken({ req })
-  if (!token) {
-    // Respuesta JSON 401 para rutas de API.
+const SESSION_COOKIE = "next-auth.session-token"
+const SECURE_SESSION_COOKIE = "__Secure-next-auth.session-token"
+
+export function middleware(req: NextRequest) {
+  const sessionCookie =
+    req.cookies.get(SESSION_COOKIE)?.value ||
+    req.cookies.get(SECURE_SESSION_COOKIE)?.value
+
+  if (!sessionCookie) {
     return NextResponse.json(
       { error: "No autenticado" },
       { status: 401 }
