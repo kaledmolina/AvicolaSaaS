@@ -80,7 +80,7 @@ export async function GET(
         name: b.name,
         initialCount: b.initialCount,
         startDate: b.startDate,
-        status: b.status,
+        status: b.status as "active" | "closed",
         notes: b.notes,
         createdAt: b.createdAt,
         updatedAt: b.updatedAt,
