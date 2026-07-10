@@ -8,7 +8,7 @@ services:
     container_name: avicola-app
     restart: unless-stopped
     ports:
-      - "3001:3000"
+      - "8085:3000"
     environment:
       - NODE_ENV=production
       # La URL de la BD persistirá en el volumen mapeado abajo
